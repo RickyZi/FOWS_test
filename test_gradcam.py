@@ -17,11 +17,12 @@ import os
 from PIL import Image
 import argparse
 from torch.utils.data import Dataset
-from utils import get_pretrained_model_path
-from utils.customDataset import FaceImagesDataset
-import utils.fornet as fornet
-from utils.fornet import *
-from utils.papers_data_augmentations import *
+from utilscripts.get_trn_tst_model import *
+from utilscripts.customDataset import FaceImagesDataset
+from utilscripts.get_trn_tst_model import get_pretrained_model
+# import utilscripts.fornet as fornet
+# from utilscripts.fornet import *
+# from utilscripts.papers_data_augmentations import *
 
 # https://github.com/jacobgil/pytorch-grad-cam/tree/master
 # pip install pip install grad-cam
@@ -44,17 +45,6 @@ def compute_gradacm(model, test_dataloader, device, model_name, exp_results_path
         else:
             raise ValueError(f"Unsupported number of target layers: {num_layers}")
         # target_layer = model.features[-1]
-    
-    elif 'effnetb4_dfdc' in model_name:
-        # target_layers = [model.efficientnet._blocks[-1]] 
-        if num_layers == 1:
-            target_layers = [model.efficientnet._blocks[-1]] 
-        elif num_layers == 2:
-            target_layers = [model.efficientnet._blocks[-2], model.efficientnet._blocks[-1]]
-        elif num_layers == 3:
-            target_layers = [model.efficientnet._blocks[-3], model.efficientnet._blocks[-2], model.efficientnet._blocks[-1]]
-        else:
-            raise ValueError(f"Unsupported number of target layers: {num_layers}")
     
     elif 'effnetb4' in model_name:
         if num_layers == 1:
@@ -120,32 +110,32 @@ def compute_gradacm(model, test_dataloader, device, model_name, exp_results_path
         print("labels: ", labels)
         print("predicted: ", predicted)
         
-        if gotcha: 
-            # if user_id == '42': 
-                if 'original' in image_paths[0]:
-                    user_id = image_paths[0].split('/')[-4]
-                    if user_id == '42':
-                        frame_id = image_paths[0].split('/')[-1].split('.')[0]
-                        challenge_id = image_paths[0].split('/')[-2]
-                        algo_id = image_paths[0].split('/')[-3]
-                        swap_id = None
-                    else: continue
-                else:
-                    user_id = image_paths[0].split('/')[-5]
-                    if user_id == '42':
-                        frame_id = image_paths[0].split('/')[-1].split('.')[0]
-                        swap_id = image_paths[0].split('/')[-2]
-                        challenge_id = image_paths[0].split('/')[-3]
-                        algo_id = image_paths[0].split('/')[-4]
-                    else: 
-                        continue
-        else: 
-            # get info to save the image from image_paths[0]
-            frame_id = image_paths[0].split('/')[-1].split('.')[0]
-            challenge_id = image_paths[0].split('/')[-2]
-            algo_id = image_paths[0].split('/')[-3]
-            user_id = image_paths[0].split('/')[-4]
-            swap_id = None
+        # if gotcha: 
+        #     # if user_id == '42': 
+        #         if 'original' in image_paths[0]:
+        #             user_id = image_paths[0].split('/')[-4]
+        #             if user_id == '42':
+        #                 frame_id = image_paths[0].split('/')[-1].split('.')[0]
+        #                 challenge_id = image_paths[0].split('/')[-2]
+        #                 algo_id = image_paths[0].split('/')[-3]
+        #                 swap_id = None
+        #             else: continue
+        #         else:
+        #             user_id = image_paths[0].split('/')[-5]
+        #             if user_id == '42':
+        #                 frame_id = image_paths[0].split('/')[-1].split('.')[0]
+        #                 swap_id = image_paths[0].split('/')[-2]
+        #                 challenge_id = image_paths[0].split('/')[-3]
+        #                 algo_id = image_paths[0].split('/')[-4]
+        #             else: 
+        #                 continue
+        # else: 
+        # get info to save the image from image_paths[0]
+        frame_id = image_paths[0].split('/')[-1].split('.')[0]
+        challenge_id = image_paths[0].split('/')[-2]
+        algo_id = image_paths[0].split('/')[-3]
+        user_id = image_paths[0].split('/')[-4]
+        # swap_id = None
 
         
         # ---------------------------------------------------------------------------------------------------------- #
@@ -171,26 +161,26 @@ def compute_gradacm(model, test_dataloader, device, model_name, exp_results_path
         os.makedirs(cam_subfolders_path, exist_ok=True)
        
 
-        if gotcha: 
-            if swap_id: 
-                # print(swap_id)
-                cam_image_path = f"{cam_subfolders_path}/{challenge_id}_{swap_id}_{frame_id}.png"
-                results['image_path'].append(f"{user_id}_{algo_id}_{challenge_id}_{swap_id}_{frame_id}")
-                results['label'].append(labels.cpu().numpy())
-                results['prediction'].append(predicted.cpu().numpy())
-                # print(cam_image_path)
-                # 
-            else:
-                cam_image_path = f"{cam_subfolders_path}/{challenge_id}_{frame_id}.png"
-                results['image_path'].append(f"{user_id}_{algo_id}_{challenge_id}_{frame_id}")
-                results['label'].append(labels.cpu().numpy())
-                results['prediction'].append(predicted.cpu().numpy())
-        else: 
-            # print("no swap_id")
-            cam_image_path = f"{cam_subfolders_path}/{challenge_id}_{frame_id}.png"
-            results['image_path'].append(f"{user_id}_{algo_id}_{challenge_id}_{frame_id}")
-            results['label'].append(labels.cpu().numpy())
-            results['prediction'].append(predicted.cpu().numpy())
+        # if gotcha: 
+        #     if swap_id: 
+        #         # print(swap_id)
+        #         cam_image_path = f"{cam_subfolders_path}/{challenge_id}_{swap_id}_{frame_id}.png"
+        #         results['image_path'].append(f"{user_id}_{algo_id}_{challenge_id}_{swap_id}_{frame_id}")
+        #         results['label'].append(labels.cpu().numpy())
+        #         results['prediction'].append(predicted.cpu().numpy())
+        #         # print(cam_image_path)
+        #         # 
+        #     else:
+        #         cam_image_path = f"{cam_subfolders_path}/{challenge_id}_{frame_id}.png"
+        #         results['image_path'].append(f"{user_id}_{algo_id}_{challenge_id}_{frame_id}")
+        #         results['label'].append(labels.cpu().numpy())
+        #         results['prediction'].append(predicted.cpu().numpy())
+        # else: 
+        # print("no swap_id")
+        cam_image_path = f"{cam_subfolders_path}/{challenge_id}_{frame_id}.png"
+        results['image_path'].append(f"{user_id}_{algo_id}_{challenge_id}_{frame_id}")
+        results['label'].append(labels.cpu().numpy())
+        results['prediction'].append(predicted.cpu().numpy())
             
         # save gradcam
         cv2.imwrite(cam_image_path, cv2.cvtColor(cam_image, cv2.COLOR_RGB2BGR))
@@ -202,7 +192,7 @@ def compute_gradacm(model, test_dataloader, device, model_name, exp_results_path
     print("len(results['label'])", len(results['label']))
     print("len(results['prediction'])", len(results['prediction']))
     print(f"Batch {i}") # should be 14 
-    breakpoint()
+    # breakpoint()
 
     print("Grad-CAM testing completed!")
     results_table = pd.DataFrame(results)
@@ -241,68 +231,74 @@ def main():
     print("tl: ", args.tl)
     print("num_layers: ", args.num_layers)
     
-    pretrained_model_path = get_pretrained_model_path(args, model)
+    # pretrained_model_path = get_pretrained_model_path(args, model)
 
-    print("model_path: ", pretrained_model_path)
+    # print("model_path: ", pretrained_model_path)
     
     # load the model to the GPU
     # load the model
-    if args.model == 'icpr2020':
-        net_name = "EfficientNetB4"
-        net_class = getattr(fornet, net_name)
-        model: FeatureExtractor = net_class().to(device)
-        model_state = torch.load(pretrained_model_path, map_location = "cpu")
-        incomp_keys = model.load_state_dict(model_state['net'], strict=True)
-        print(incomp_keys)
-        print(model)
-        print('Model loaded!')
-        args.dataset = 'milan_occ' if args.dataset == 'thesis_occ' else 'milan_no_occ' # replace the dataset name with the one used in the training
-        # args.data_aug = 'milan'
-        model_name = args.model
-    elif args.model == 'neurips2023':
-        net_name = "DFB_xceptionNet"
-        # @TODO: check how to load the DFB model and test it 
-    else:
-        print("model saved in:", pretrained_model_path)
-        model_name = args.model
-        # model.load_state_dict(torch.load(pretrained_model_path))
-        best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
-        model.load_state_dict(best_ckpt['model']) 
-        model.to(device)
-        print(model)
-        print("Model loaded!")
+    # if args.model == 'icpr2020':
+    #     net_name = "EfficientNetB4"
+    #     net_class = getattr(fornet, net_name)
+    #     model: FeatureExtractor = net_class().to(device)
+    #     model_state = torch.load(pretrained_model_path, map_location = "cpu")
+    #     incomp_keys = model.load_state_dict(model_state['net'], strict=True)
+    #     print(incomp_keys)
+    #     print(model)
+    #     print('Model loaded!')
+    #     args.dataset = 'milan_occ' if args.dataset == 'thesis_occ' else 'milan_no_occ' # replace the dataset name with the one used in the training
+    #     # args.data_aug = 'milan'
+    #     model_name = args.model
+    # elif args.model == 'neurips2023':
+    #     net_name = "DFB_xceptionNet"
+    #     # @TODO: check how to load the DFB model and test it 
+    # else:
+    # print("model saved in:", pretrained_model_path)
+    # model_name = args.model
+    # # model.load_state_dict(torch.load(pretrained_model_path))
+    # best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
+    # model.load_state_dict(best_ckpt['model']) 
+    # model.to(device)
+    # print(model)
+    # print("Model loaded!")
 
-    print("args.dataset: ", args.dataset)
-    breakpoint()
+    # print("args.dataset: ", args.dataset)
+    # breakpoint()
 
-    # transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
-    if args.dataset == 'milan_occ' or args.dataset == 'milan_no_occ': 
-        # add the Milan Augmentation
-        milan_transforms = milan_test_transf()
-    else: 
-        test_transform = transforms.Compose([
-            transforms.Resize((256,256)),
-            transforms.CenterCrop((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+    model, model_name, pretrained_model_path = get_pretrained_model(args, device)
+    model.to(device)
+    print("Model loaded!")
+    print("model_path: ", pretrained_model_path)
+    print(model)
+
+    # # transform = transforms.Compose([transforms.Resize((224, 224)), transforms.ToTensor()])
+    # if args.dataset == 'milan_occ' or args.dataset == 'milan_no_occ': 
+    #     # add the Milan Augmentation
+    #     milan_transforms = milan_test_transf()
+    # else: 
+    test_transform = transforms.Compose([
+        transforms.Resize((256,256)),
+        transforms.CenterCrop((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
 
     # select the test dataset
-    if args.dataset == 'thesis_occ':
+    if args.dataset == 'fows_occ':
         test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_thesis/thesis_occ/', test_transform)
             # '/media/data/rz_dataset/users_face_occlusion/testing/', test_transform)
-    elif args.dataset == 'thesis_no_occ':
+    elif args.dataset == 'fows_no_occ':
         test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_thesis/thesis_no_occ/', test_transform)
-    elif args.dataset == 'gotcha_occ':
-        test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_gotcha/gotcha_occ_testing', test_transform)
-        gotcha = True
-    elif args.dataset == 'gotcha_no_occ':
-        test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_gotcha/gotcha_no_occ_testing', test_transform)
-        gotcha = True
-    elif args.dataset == 'milan_occ':
-        test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_milan/occlusion_testing/', milan_transforms, use_albu=True)
-    elif args.dataset == 'milan_no_occ':
-        test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_milan/no_occlusion_testing/', milan_transforms, use_albu=True)
+    # elif args.dataset == 'gotcha_occ':
+    #     test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_gotcha/gotcha_occ_testing', test_transform)
+    #     gotcha = True
+    # elif args.dataset == 'gotcha_no_occ':
+    #     test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_gotcha/gotcha_no_occ_testing', test_transform)
+    #     gotcha = True
+    # elif args.dataset == 'milan_occ':
+    #     test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_milan/occlusion_testing/', milan_transforms, use_albu=True)
+    # elif args.dataset == 'milan_no_occ':
+    #     test_dataset = FaceImagesDataset('/home/rz/rz-test/bceWLL_test/rand_imgs_test/rand_imgs_milan/no_occlusion_testing/', milan_transforms, use_albu=True)
     else: 
         raise ValueError(f"Unsupported dataset name: {args.dataset}")
     # test_dataset = FaceImagesDataset(directory='/content/drive/MyDrive/WORK/test_gradcam/rand_imgs/thesis_occ/', transform=transform)

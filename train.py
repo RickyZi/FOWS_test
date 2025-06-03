@@ -20,35 +20,20 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision.models as models
-from torch.utils.data import DataLoader
-# from torchvision.models import mobilenet_v2
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, random_split
 import os
-from utils.customDataset import FaceImagesDataset
-# from utils.albuDataLoader import FaceImagesAlbu
-from utils.train_val_test import *
-# from utils.gotcha_trn_val_tst import *
-# import cv2
-import wandb # for logging results to wandb
+from utilscripts.customDataset import FaceImagesDataset
+from utilscripts.train_val_test import *
 import argparse # for command line arguments
-# pip install efficientnet_pytorch # need to install this package to use EfficientNet
-# from efficientnet_pytorch import EfficientNet
 
-from utils.logger import * # import the logger functions
+from utilscripts.logger import * # import the logger functions
 import timm # for using the XceptionNet model (pretrained)
 # pip install timm # install the timm package to use the XceptionNet model
-# import utils.papers_data_augmentations
-from utils.papers_data_augmentations import *
-
-import utils.fornet as fornet
-from utils.fornet import *
-
 import yaml
-# from dfb.dfb_detectors import DETECTOR
-
 import random
 import datetime
-
-from utils.focalLoss import FocalLoss 
+from utilscripts.focalLoss import FocalLoss 
+from utilscripts.get_trn_tst_model import get_train_model
 # ------------------------------------------------------------------------------------------- #
 # Create the argument parser
 def get_args_parse():
@@ -86,31 +71,10 @@ def check_model_name(model_path):
         model_path = model_path.replace(model_name, f'{model_name}_{i}') # replace the model name with the new model name
     return model_path
 
-def milan_save_model(net: nn.Module, optimizer: optim.Optimizer,
-               train_loss: float, val_loss: float,
-               iteration: int, batch_size: int, epoch: int,
-               path: str):
-    path = str(path)
-    state = dict(net=net.state_dict(),
-                 opt=optimizer.state_dict(),
-                 train_loss=train_loss,
-                 val_loss=val_loss,
-                 iteration=iteration,
-                 batch_size=batch_size,
-                 epoch=epoch)
-    torch.save(state, path)
-
 
 def init_seed():
     # --------------------------------------------- #
-    # fnct from DFB code
-    # def init_seed(config):
-    #     if config['manualSeed'] is None:
-    #         config['manualSeed'] = random.randint(1, 10000)
-    #     random.seed(config['manualSeed'])
-    #     torch.manual_seed(config['manualSeed'])
-    #     if config['cuda']:
-    #         torch.cuda.manual_seed_all(config['manualSeed'])
+    # taken from: https://github.com/SCLBD/DeepfakeBench/blob/main/training/train.py
     # Set the random seed for reproducibility
     random.seed(42)
     # np.random.seed(42)
@@ -129,480 +93,40 @@ def check_model_gradient(model):
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(f"Layer: {name}, requires_grad: {param.requires_grad}")
-        # if 'fc' in name:
-        #     print(f"Layer: {name}, requires_grad: {param.requires_grad}")
-        # else:
-        #     print(f"Layer: {name}, requires_grad: {param.requires_grad}")
 
 def main(): 
-    # ----------------------------------------- #
-    # main function to train and test the model #
-    # ----------------------------------------- #
-
-
     # Parse the arguments
     parser = get_args_parse() # get the arguments from the command line 
     args, unknown = parser.parse_known_args() # parse the known arguments and ignore the unknown ones
     pretrained_model_path = ''
-    # --------------------------------- #
-    # wandb setup
-    # --------------------------------- #
-    # if args.wandb:
-    #     # start the wandb session
-    #     run = wandb.init(
-    #             project='gotcha', # created new project to track the results of the model
-    #             entity ="dl-ais",
-    #             # config={
-    #             #     "learning_rate": 0.001,
-    #             #     "architecture": "mobilenetv2",
-    #             #     "dataset": "face-occlusion-dirty",
-    #             #     "epochs": 10,
-    #             #     "loss": "BCEwithLogitsLoss",
-    #             #     },
-    #             # tags =["new_focal_loss", "no_resize_rotation_color_jitter"]
-    #             tags=[args.tags], # for finding the wandb session online
-    #             # id = args.tags # set the id of the wandb session to the tags
-    #     )
-    #     # run_id = run.id # use id to get output.log file of the run
-    #     # print(run.id) # print the wandb session id 
-    #     # ./wandb/run-20240610_124102-zppjwmnl
-    #     # run-20240610_124102-zppjwmnl -> run id
-    # else:
-    #     print("Not using wandb for logging")
-
-
-    # ---------------------------------------------------------- #
-    # Load the pre-trained model (MobileNetV2 or EfficientNetB4) #
-    # ---------------------------------------------------------- #   
 
     init_seed() # init random seed for reproducibility
 
     # if args.scratch and args.model == 'mobilenetv2':
     # Move the model to GPU if available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    # print("thresh: ", args.thresh)
 
-    # milan_model = False
-    print("thresh: ", args.thresh)
     # ----------------------- #
     # --- BASELINE MODELS --- #
     # ----------------------- #
 
-    if args.model == 'mnetv2': 
-        print("Loading MobileNetV2 model")
-
-        if args.tl and args.resume:
-            print("Resume training from checkpoint for MobileNetV2")
-            print("checkpoint path:", args.resume)
-            pretrained_model_path = args.resume
-            model_name = "MobileNetV2_TL"
-            checkpoint = torch.load(args.resume, map_location = "cpu")
-            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
-            model.load_state_dict(checkpoint['model'])
-            # model.to(device)
-            print('Model loaded!')
-
-        elif args.tl:
-            print("Loading MobileNetV2 pre-trained model")
-            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
-            print("Transfer learning - Freezing all layers except the classifier")
-            # Freeze all layers
-            for param in model.parameters():
-                param.requires_grad = False
-            
-            # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
-
-            # check the model gradient
-            check_model_gradient(model)
-            # ()
-            model_name = 'MobileNetV2_TL' # add the model name to the model object
-        
-        elif args.ft:
-            print("Fine-Tuning MobileNetV2 pre-trained model")
-            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
-            print("Transfer learning - Freezing all layers except the classifier")
-            # # Freeze all layers
-            # for param in model.parameters():
-            #     param.requires_grad = False
-            
-            # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
-            if args.resume:
-                # if args.tl and args.resume:
-                print("Resume training from checkpoint for MobileNetV2")
-                print("checkpoint path:", args.resume)
-                pretrained_model_path = args.resume
-                # model_name = "XceptionNet_TL"
-                checkpoint = torch.load(args.resume, map_location = "cpu")
-                # model = timm.create_model('xception', pretrained=True)
-                model.load_state_dict(checkpoint['model'])
-            # check the model gradient
-            check_model_gradient(model)
-            # ()
-            model_name = 'MobileNetV2_FT' # add the model name to the model object
-
-        else:
-            # print("problem in loading the model")
-            # exit()
-            print("Loading MobileNetV2 pre-trained model")
-            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
-            # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
-
-            # check the model gradient
-            check_model_gradient(model)
-            # ()
-            model_name = 'MobileNetV2' # add the model name to the model object
-
-        model.to(device)
-        print("Model loaded!")
-
-        # print(model)
-        # ()
-        # exit()
-
-    elif args.model == 'effnetb4':
-        print("Loading EfficientNetB4 model")
-        # model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1')
-        # pip install efficientnet_pytorch
-        # run this command to install the efficientnet model
-        # model = EfficientNet.from_pretrained('efficientnet-b4')
-
-        if args.tl: # and args.resume != '':
-            print("Loading EfficientNetB4 pre-trained model")
-            model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1') # correct way to call pre-trained model
-            # https://pytorch.org/vision/main/models/generated/torchvision.models.efficientnet_b4.html
-            print("Transfer learning - Freezing all layers except the classifier")
-            # Freeze all layers
-            for param in model.parameters():
-                param.requires_grad = False
-            
-            # Replace the classifier layer
-            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real or swap face
-            # last layer of EfficientNetB4 is a Linear layer (classifier) with 1000 outputs (for ImageNet) -> change it to 1 output
-            
-            if args.resume:
-                print("Resume training from checkpoint for EfficientNetB4")
-                checkpoint = torch.load(args.resume, map_location = "cpu")
-                pretrained_model_path = args.resume
-                model.load_state_dict(checkpoint['model'])
-                # if 'optimizer' in checkpoint and 'epoch' in checkpoint and 'criterion' in checkpoint:
-                #     optimizer.load_state_dict(checkpoint['optimizer'])
-                #     # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-                #     start_epoch = checkpoint['epoch'] +1 
-                #     criterion = checkpoint['criterion']
-
-                print("model loaded!")
-                print("model info:")
-                print("epoch: ", checkpoint['epoch'])
-                # print("train_loss: ", checkpoint['train_loss'])
-                print("val_loss: ", checkpoint['val_loss'])
-                # print("train_accuracy: ", checkpoint['train_accuracy'])
-                print("val_accuracy: ", checkpoint['val_accuracy'])
-                print("optimizer: ", checkpoint['optimizer'])
-                print("criterion: ", checkpoint['criterion'])
-                print("last_epoch: ", checkpoint['epoch'])
-
-            model_name = 'EfficientNet_B4' # add the model name to the model object
-            model.to(device)
-            # check the model gradient
-            check_model_gradient(model)
-            # ()
-        # ------------------------------------------------------------------------ #
-        elif args.ft: 
-            print("Fine-Tuning the EfficientNetB4 pre-trained model")
-            model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1') # correct way to call pre-trained model
-            # Replace the classifier layer
-            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real or swap face
-            model_name = 'EfficientNet_B4_FT'
-
-            if args.resume:
-                print("Resume training from checkpoint for EfficientNetB4")
-                print("checkpoint path:", args.resume)
-                pretrained_model_path = args.resume
-
-                # check if checkpoint file is ok
-                if os.path.isfile(args.resume):
-                    try:
-                        checkpoint = torch.load(args.resume, map_location="cpu")
-                        print("Checkpoint loaded successfully.")
-                    except RuntimeError as e:
-                        print(f"Error loading checkpoint: {e}")
-                else:
-                    print(f"Checkpoint file {args.resume} does not exist.")
-
-                checkpoint = torch.load(args.resume, map_location = "cpu")
-                checkpoint.keys() # check the keys in the checkpoint
-                # ()
-                model.load_state_dict(checkpoint['model'])
-                print("model loaded!")
-                print("model info:")
-                print("epoch: ", checkpoint['epoch'])
-                # print("train_loss: ", checkpoint['train_loss'])
-                print("val_loss: ", checkpoint['val_loss'])
-                # print("train_accuracy: ", checkpoint['train_accuracy'])
-                print("val_accuracy: ", checkpoint['val_accuracy'])
-                print("optimizer: ", checkpoint['optimizer'])
-                print("criterion: ", checkpoint['criterion'])
-                print("last_epoch: ", checkpoint['epoch'])
-            
-            model.to(device)
-            # check the model gradient
-            check_model_gradient(model)
-            # ()
-
-            
-        else: 
-            # print("problem in loading the model")
-            # exit()
-            print("Loading EfficientNetB4 pre-trained model")
-            model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1') # correct way to call pre-trained model
-            # Replace the classifier layer
-            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1)
-            model.to(device)
-            model_name = 'EfficientNet_B4' # add the model name to the model object
-        # load the pre-trained model for testing (load model weights)
-        # pretrained_model_path = args.save_model_path 
-        # print("model saved in:", pretrained_model_path)
-        # model.load_state_dict(torch.load(pretrained_model_path)) 
-        # model.to(device)
-        print("Model loaded!")
-
-        # print(model)
-        # exit()
-        
-    elif args.model == 'xception':
-        # print("Loading pretrained XceptionNet model...")
-        # load the xceptionet model
-        # pip install timm
-        # import timm
-
-        # if args.tl and args.resume:
-        #     print("Resume training from checkpoint for XceptionNet")
-        #     print("checkpoint path:", args.resume)
-        #     model_name = "XceptionNet_TL"
-        #     checkpoint = torch.load(args.resume, map_location = "cpu")
-        #     model = timm.create_model('xception', pretrained=True)
-        #     model.load_state_dict(checkpoint['model'])
-        #     model.to(device)
-        #     print('Model loaded!')
+    model, model_name = get_train_model(args)
+    model.to(device)
+    print("Model loaded!")
+    print(model)
+    check_model_gradient(model)
 
 
-        if args.tl:
-            print("Loading XceptionNet pre-trained model - Transfer learning - Freezing all layers except the classifier")
-            # print("Transfer learning - Freezing all layers except the classifier")
-            model = timm.create_model('xception', pretrained=True) #, num_classes=1) # only 1 output -> prob of real or swap face
-            model_name = 'XceptionNet' # add the model name to the model object
-            # print("Transfer learning - Freezing all layers except the classifier")
-            # Freeze all layers except the classifier
-            for param in model.parameters():
-                param.requires_grad = False
+    
 
-            # Replace the classifier layer
-            in_features = model.get_classifier().in_features
-            model.fc = nn.Linear(in_features, 1)  # modify the last layer of the classifier to have 1 output -> prob of real or swap face
-
-            # Ensure the classifier layer is trainable
-            for param in model.fc.parameters():
-                param.requires_grad = True
-           
-            # check the model gradient
-            check_model_gradient(model)
-
-            if args.resume:
-                # if args.tl and args.resume:
-                print("Resume training from checkpoint for XceptionNet")
-                print("checkpoint path:", args.resume)
-                pretrained_model_path = args.resume
-                model_name = "XceptionNet_TL"
-                checkpoint = torch.load(args.resume, map_location = "cpu")
-                # model = timm.create_model('xception', pretrained=True)
-                model.load_state_dict(checkpoint['model'])
-                # model.to(device)
-                # print('Model loaded!')
-
-            print('Model loaded!')
-            model.to(device)
-
-        elif args.ft: 
-            print("Fine Tuning XceptionNet pre-trained model")
-            # print("Transfer learning - Freezing all layers except the classifier")
-            model = timm.create_model('xception', pretrained=True) #, num_classes=1) # only 1 output -> prob of real or swap face
-            model_name = 'XceptionNet' # add the model name to the model object
-            # print("Transfer learning - Freezing all layers except the classifier")
-            # Freeze all layers except the classifier
-            # for param in model.parameters():
-            #     param.requires_grad = False
-
-            # Replace the classifier layer
-            in_features = model.get_classifier().in_features
-            model.fc = nn.Linear(in_features, 1)  # modify the last layer of the classifier to have 1 output -> prob of real or swap face
-
-            # # Ensure the classifier layer is trainable
-            # for param in model.fc.parameters():
-            #     param.requires_grad = True
-            if args.resume:
-                # if args.tl and args.resume:
-                print("Resume training from checkpoint for XceptionNet")
-                print("checkpoint path:", args.resume)
-                pretrained_model_path = args.resume
-                model_name = "XceptionNet_TL"
-                checkpoint = torch.load(args.resume, map_location = "cpu")
-                # model = timm.create_model('xception', pretrained=True)
-                model.load_state_dict(checkpoint['model'])
-            # check the model gradient
-            check_model_gradient(model)
-            # ()
-
-        else: 
-            # print("problem in loading the model")
-            # exit()
-            print("Loading XceptionNet pre-trained model")
-            model = timm.create_model('xception', pretrained=True) #, num_classes=1) # only 1 output -> prob of real or swap face
-            model_name = 'XceptionNet' # add the model name to the model object
-            # print("Transfer learning - Freezing all layers except the classifier")
-            # # Freeze all layers except the classifier
-            # for param in model.parameters():
-            #     param.requires_grad = False
-
-            # Replace the classifier layer
-            in_features = model.get_classifier().in_features
-            model.fc = nn.Linear(in_features, 1)  # modify the last layer of the classifier to have 1 output -> prob of real or swap face
-
-            # Ensure the classifier layer is trainable
-            for param in model.fc.parameters():
-                param.requires_grad = True
-           
-            # check the model gradient
-            check_model_gradient(model)
-        # else:
-        #     # retraining the model with one output class 
-        #     model = timm.create_model('xception', pretrained=True, num_classes=1) # only 1 output -> prob of real or swap face
-        #     model_name = 'XceptionNet' # add the model name to the model object
-
-        # ()
-
-        model.to(device)
-        print("Model loaded!")
-
-        print(model)
-        # exit()
-        # check the model gradient
-        check_model_gradient(model)
-        # ()
-
-
-    # ------------------------ #
-    # ---- ICPR2020 MODEL ---- #
-    # ------------------------ #
-    elif args.model == 'icpr2020':
-        print("Loading ICPR2020 model")
-        args.optimizer = "adam"
-        if args.tl and args.resume:
-            print("Resume training from checkpoint for EfficientNetB4_DFDC")
-            print("checkpoint path:", args.resume)
-            pretrained_model_path = args.resume
-            model_name = "EfficientNetB4_DFDC_TL"
-            checkpoint = torch.load(args.resume, map_location = "cpu")
-            net_name = "EfficientNetB4"
-            net_class = getattr(fornet, net_name)
-            # net: FeatureExtractor = net_class().eval().to(device)
-            model: FeatureExtractor = net_class().to(device)
-            # incomp_keys = model.load_state_dict(model_state['net'], strict=True)
-            incomp_keys = model.load_state_dict(checkpoint['model'], strict=True)
-            print(incomp_keys)
-            # print(model)
-            print('Model loaded!')
-
-        elif args.tl:
-            print("Loading EfficientNetB4_DFDC pre-trained model")
-            pretrained_model_path = './_pretrained_models_papers_/icpr2020dfdc_weights/EfficientNetB4_DFDC/bestval.pth'
-            model_state = torch.load(pretrained_model_path, map_location = "cpu")
-            # milan_model = True
-            # net_name = "EfficientNetB4"
-            net_class = getattr(fornet, "EfficientNetB4")
-            # net: FeatureExtractor = net_class().eval().to(device)
-            model: FeatureExtractor = net_class().to(device)
-            incomp_keys = model.load_state_dict(model_state['net'], strict = True)
-            model_name = "EfficientNetB4_DFDC"
-            # incomp_keys = net.load_state_dict(state['net'], strict=True)
-            print(incomp_keys)
-            print('Model loaded!')
-            print("Transfer learning - Freezing all layers except the classifier")
-            # Freeze all layers except the classifier
-            for param in model.parameters():
-                param.requires_grad = False
-
-            # Ensure the classifier layer is trainable
-            for param in model.classifier.parameters():
-                param.requires_grad = True
-
-        else: 
-            # print("problem in loading the model")
-            # exit()
-            print("Loading EfficientNetB4_DFDC pre-trained model")
-            pretrained_model_path = './_pretrained_models_papers_/icpr2020dfdc_weights/EfficientNetB4_DFDC/bestval.pth'
-            model_state = torch.load(pretrained_model_path, map_location = "cpu")
-            # milan_model = True
-            # net_name = "EfficientNetB4"
-            net_class = getattr(fornet, "EfficientNetB4")
-            # net: FeatureExtractor = net_class().eval().to(device)
-            model: FeatureExtractor = net_class().to(device)
-            incomp_keys = model.load_state_dict(model_state['net'], strict = True)
-            model_name = "EfficientNetB4_DFDC"
-            # incomp_keys = net.load_state_dict(state['net'], strict=True)
-            print(incomp_keys)
-            print('Model loaded!')
-
-    else:
-        print("Model not supported")
-        exit()
-
-
-    # # Move the model to GPU if available
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    # # print("device", device) # output: cpu -> gpu drivers not active/updated??
-    # model = model.to(device)
-
-
-    # load the dataset -> for now only the face occlusion dataset (thesis), later add the GOTCHA dataset
-    # NOTE: also need to fix the customDataset.py to load the GOTCHA dataset as well!!
+    
     # dataset
-    gotcha = False
-    if args.dataset == 'thesis_occ':
+    if args.dataset == 'fows_occ':
         train_dir = '/media/data/rz_dataset/users_face_occlusion/training/'
-        # test_dir = '/media/data/rz_dataset/users_face_occlusion/testing/'
-        # args.data_aug = ''
-        
 
-    elif args.dataset == 'thesis_no_occ':
+    elif args.dataset == 'fows_no_occ':
         train_dir = '/media/data/rz_dataset/user_faces_no_occlusion/training/'
-        # test_dir = '/media/data/rz_dataset/user_faces_no_occlusion/testing/'
-
-    elif args.dataset == 'milan_occ':
-        train_dir = '/media/data/rz_dataset/milan_faces/occlusion/training'
-        args.data_aug = 'milan'
-
-    elif args.dataset == 'milan_no_occ':
-        train_dir = '/media/data/rz_dataset/milan_faces/no_occlusion/training'
-        args.data_aug = 'milan'
-
-    elif args.dataset == 'gotcha_occ':
-        train_dir = '/media/data/rz_dataset/gotcha/balanced_gotcha/occlusion/training'
-        gotcha = True
-        # num-epochs 15 --batch-size 64 --optimizer "adamw" --loss "bce"
-        args.num_epochs = 15
-        args.loss = "bce"
-        # if args.model not in ["effnetb4_dfdc", "effnetb4_ff"]:
-        #     args.optimizer = 'adamw'
-
-    elif args.dataset == 'gotcha_no_occ':
-        train_dir = '/media/data/rz_dataset/gotcha/balanced_gotcha/no_occlusion/training'
-        gotcha = True
-        args.num_epochs = 15
-        args.loss = "bce"
-        # if args.model not in ["effnetb4_dfdc", "effnetb4_ff"]:
-        #     args.optimizer = 'adamw'
 
     else:
         print("Dataset not supported")
@@ -674,17 +198,13 @@ def main():
         save_model_folder = f'./results/results_FT/{args.tags}/training/' + model_name + '_' + datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         # save_model_name = 'best_model.pth'
         os.makedirs(save_model_folder, exist_ok=True)
-    elif args.save_model:
+    else:
         # model_path = './model/' + args.tags +'_train' + '/' + 'best_model.pth'
         # save_model_folder = f'./results/{args.tags}/training/model/' 
-        save_model_folder = f'./results/results_GEN/{args.tags}/training/'+ model_name + '_' + datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+        save_model_folder = f'./results/{args.tags}/training/'+ model_name + '_' + datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         # save_model_name = 'best_model.pth'
         os.makedirs(save_model_folder, exist_ok=True)
         # model_path = check_model_name(save_model_folder, save_model_name)
-    else:
-        # use default path
-        model_path = './model/train/best_model.pth'
-        os.makedirs(os.path.dirname(model_path), exist_ok=True)
 
     # print("model folder created")
     # print("model path:", model_path)
@@ -693,10 +213,7 @@ def main():
     # ---------------------------------- #
     # Define the dataset and dataloaders #
     # ---------------------------------- #
-    # if args.model == 'mobilenetv2':
-
     generator = torch.Generator().manual_seed(42) # fix generator for reproducible results (hopefully good)
-
     batch_size = args.batch_size # 32
 
     if args.data_aug == 'default':
@@ -704,15 +221,11 @@ def main():
         # Transformations for training data
         train_transform = transforms.Compose([
             # base trasnf
-            # transforms.Resize((256,256)),# interpolation = transforms.InterpolationMode.BILINEAR), # might not need since randomresizedcrop extracts rand crop and then resize it to 224 dim
-            # Resize(256) -> resize the image to 256*h/2, 256, in our case is the same since the images have the same width and height
-            transforms.RandomResizedCrop((224,224)), #interpolation = BICUBIC), # extracts random crop from image (i.e. 300x300) and rescale it to 224x224
+            transforms.RandomResizedCrop((224,224)), # extracts random crop from image (i.e. 300x300) and rescale it to 224x224
             transforms.RandomHorizontalFlip(), # helps the training
             # augmentations
             transforms.RandomRotation((-5,5)), # rotate the image by a random angle between -5 and 5 degrees
             transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), # adjust the brightness, contrast, saturation and hue of the image
-            # transforms.GaussianBlur((5,9), sigma=(0.1, 2.0)), # blur the image with a random kernel size and a random standard deviation
-            # kernel size (5,9) taken from pytorch doc, for sigma used the default values -> https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#sphx-glr-auto-examples-transforms-plot-transforms-illustrations-py
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
@@ -723,114 +236,14 @@ def main():
         val_size = len(train_dataset) - train_size # 20% of the dataset for validation -> 2400 thesis imgs in testing/validation
 
         # split the dataset into training and validation
-        train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size], generator)
+        train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size], generator)
         # returns two datasets: train_dataset and val_dataset
-
-        # -------------------------------------------------------------------------------- #
-        # old dataloader definition
-        # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        # val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        # -------------------------------------------------------------------------------- #
-
         # test with samplers for the dataloader
-        sampler_train = torch.utils.data.RandomSampler(train_dataset)
-        sampler_val   = torch.utils.data.SequentialSampler(val_dataset)
-
-        # batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
+        sampler_train = RandomSampler(train_dataset)
+        sampler_val   = SequentialSampler(val_dataset)
 
         train_dataloader = DataLoader(train_dataset,batch_size=batch_size, sampler=sampler_train, drop_last = True, num_workers = 3) # batch_sampler = batch_sampler_train) #
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, sampler=sampler_val, drop_last = False, num_workers = 3)
-
-        # # test dataloader 
-        # test_dataset = FaceImagesDataset(test_dir, test_transform)
-        # sampler_test = torch.utils.data.SequentialSampler(test_dataset) 
-        # test_dataloader = DataLoader(test_dataset, batch_size=64, sampler=sampler_test) # shuffle=False)
-
-    elif args.data_aug == 'new': 
-        print("Using default data augmentation (thesis)")
-        # Transformations for training data
-        train_transform = transforms.Compose([
-            # base trasnf
-            transforms.Resize((256,256)),# interpolation = transforms.InterpolationMode.BILINEAR), # might not need since randomresizedcrop extracts rand crop and then resize it to 224 dim
-            # Resize(256) -> resize the image to 256*h/2, 256, in our case is the same since the images have the same width and height
-            transforms.RandomCrop((224,224)), #interpolation = BICUBIC), # extracts random crop from image (i.e. 300x300) and rescale it to 224x224
-            transforms.RandomHorizontalFlip(), # helps the training
-            # augmentations
-            transforms.RandomRotation((-5,5)), # rotate the image by a random angle between -5 and 5 degrees
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), # adjust the brightness, contrast, saturation and hue of the image
-            # transforms.GaussianBlur((5,9), sigma=(0.1, 2.0)), # blur the image with a random kernel size and a random standard deviation
-            # kernel size (5,9) taken from pytorch doc, for sigma used the default values -> https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#sphx-glr-auto-examples-transforms-plot-transforms-illustrations-py
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-
-        # training and validation dataset
-        train_dataset = FaceImagesDataset(train_dir, train_transform)
-        train_size = int(0.8 * len(train_dataset)) # 80% of the dataset for training  -> 9600 thesis imgs in training
-        val_size = len(train_dataset) - train_size # 20% of the dataset for validation -> 2400 thesis imgs in testing/validation
-
-        # split the dataset into training and validation
-        train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size], generator)
-        # returns two datasets: train_dataset and val_dataset
-
-        # -------------------------------------------------------------------------------- #
-        # old dataloader definition
-        # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        # val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        # -------------------------------------------------------------------------------- #
-
-        # test with samplers for the dataloader
-        sampler_train = torch.utils.data.RandomSampler(train_dataset)
-        sampler_val   = torch.utils.data.SequentialSampler(val_dataset)
-
-        # batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
-
-        train_dataloader = DataLoader(train_dataset,batch_size=batch_size, sampler=sampler_train, drop_last = True, num_workers = 3) # batch_sampler = batch_sampler_train) #
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, sampler=sampler_val, drop_last = False, num_workers = 3)
-
-
-    elif args.data_aug == 'crop':
-        print("Using default data augmentation (thesis)")
-        # Transformations for training data
-        train_transform = transforms.Compose([
-            # base trasnf
-            transforms.Resize((256,256)),# interpolation = transforms.InterpolationMode.BILINEAR), # might not need since randomresizedcrop extracts rand crop and then resize it to 224 dim
-            # Resize(256) -> resize the image to 256*h/2, 256, in our case is the same since the images have the same width and height
-            transforms.CenterCrop((224,224)), #interpolation = BICUBIC), # extracts random crop from image (i.e. 300x300) and rescale it to 224x224
-            transforms.RandomHorizontalFlip(), # helps the training
-            # augmentations
-            transforms.RandomRotation((-5,5)), # rotate the image by a random angle between -5 and 5 degrees
-            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), # adjust the brightness, contrast, saturation and hue of the image
-            # transforms.GaussianBlur((5,9), sigma=(0.1, 2.0)), # blur the image with a random kernel size and a random standard deviation
-            # kernel size (5,9) taken from pytorch doc, for sigma used the default values -> https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#sphx-glr-auto-examples-transforms-plot-transforms-illustrations-py
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
-
-        # training and validation dataset
-        train_dataset = FaceImagesDataset(train_dir, train_transform)
-        train_size = int(0.8 * len(train_dataset)) # 80% of the dataset for training  -> 9600 thesis imgs in training
-        val_size = len(train_dataset) - train_size # 20% of the dataset for validation -> 2400 thesis imgs in testing/validation
-
-        # split the dataset into training and validation
-        train_dataset, val_dataset = torch.utils.data.random_split(train_dataset, [train_size, val_size], generator)
-        # returns two datasets: train_dataset and val_dataset
-
-        # -------------------------------------------------------------------------------- #
-        # old dataloader definition
-        # train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-        # val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-        # -------------------------------------------------------------------------------- #
-
-        # test with samplers for the dataloader
-        sampler_train = torch.utils.data.RandomSampler(train_dataset)
-        sampler_val   = torch.utils.data.SequentialSampler(val_dataset)
-
-        # batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
-
-        train_dataloader = DataLoader(train_dataset,batch_size=batch_size, sampler=sampler_train, drop_last = True, num_workers = 3) # batch_sampler = batch_sampler_train) #
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, sampler=sampler_val, drop_last = False, num_workers = 3)
-
 
     else:
         print("Data augmentation not supported")

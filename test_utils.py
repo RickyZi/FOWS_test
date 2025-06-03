@@ -6,21 +6,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.models as models
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
+# import albumentations as A
+# from albumentations.pytorch import ToTensorV2
 from torch.utils.data import DataLoader
-from customDataset import *
-from papers_data_augmentations import *
-from logger import create_logger
-from logger import * # import the logger functions
+from utilscripts.customDataset import *
+# from papers_data_augmentations import *
+from utilscripts.logger import create_logger
+# from logger import * # import the logger functions
 import timm # for using the XceptionNet model (pretrained)
 # pip install timm # install the timm package to use the XceptionNet model
-from papers_data_augmentations import *
-import fornet
-from fornet import *
+# from papers_data_augmentations import *
+# import fornet
+# from fornet import *
 import random
-from train_val_test_v2 import test_one_epoch
-from gotcha_trn_val_tst import gotcha_test
+# from train_val_test_v2 import test_one_epoch
+# from gotcha_trn_val_tst import gotcha_test
+from utilscripts.train_val_test import *
 
 
 

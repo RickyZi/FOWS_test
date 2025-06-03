@@ -25,13 +25,13 @@ import torchvision.models as models
 from torch.utils.data import DataLoader
 import os
 from customDataset import FaceImagesDataset
-from utils.papers_data_augmentations import *
-from utils.logger import create_logger
-from utils.customDataset import FaceImagesDataset
-from utils.gotcha_dataset import gotcha_test
+from utilscripts.papers_data_augmentations import *
+from utilscripts.logger import create_logger
+from utilscripts.customDataset import FaceImagesDataset
+from utilscripts.gotcha_dataset import gotcha_test
 from model_training_scripts.bceWLL_test.utils.train_val_test import test_one_epoch
-import utils.fornet as fornet
-from utils.fornet import *
+import utilscripts.fornet as fornet
+from utilscripts.fornet import *
 from focalLoss import FocalLoss
 # import wandb # for logging results to wandb
 import argparse # for command line arguments
