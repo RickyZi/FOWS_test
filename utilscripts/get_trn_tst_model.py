@@ -24,7 +24,11 @@ from torchvision import models
 # return the path to the best_model.pth file
 
 
-def get_model_path(model_name, dataset, trn_strategy):
+def get_model_path(model_name, dataset, trn_strategy, models_folder = '../model_weights/'):
+
+    # NOTE: the defaults models_folder is the folder of the pretrained baselines.
+    # Change the models_folder to be the one where you save the model during training
+
     # Check if the model is valid
     if model_name.lower() not in ['mnetv2', 'effnetb4', 'xception']:
         print(f"Model {model_name} is not supported")
@@ -33,16 +37,15 @@ def get_model_path(model_name, dataset, trn_strategy):
     if dataset.lower() not in ['fows_occ', 'fows_no_occ', 'gotcha_occ', 'gotcha_no_occ']: 
         print(f"Dataset {dataset} is not valid")
         exit()
-    # trn_strategy = trn_strategy.upper() if trn_strategy.islower() else trn_strategy.lower()
+    
     # Get the model path based on the arguments
     model_info = model_name + '_' + dataset + '_' + trn_strategy.upper() #('_FT' if ft else '_TL')
     # '_TL' if tl else 
     print("Model info: ", model_info)
-    models_folder = '../model_weights/' + trn_strategy.upper() + '/'
-    # if tl:
-    #     models_folder = '../model_weights/TL/'
-    # else:
-    #     models_folder = '../model_weights/FT/' 
+    
+    # models_folder = '../model_weights/' + trn_strategy.upper() + '/'
+    models_folder += trn_strategy.upper() + '/' 
+
     pretrained_model_path = ''
 
     # Check if the model path exists
@@ -91,7 +94,8 @@ def get_model_path(model_name, dataset, trn_strategy):
 #     return model_path
 
 # ------------------------------------------------------------------------------------------- #
-def get_pretrained_model(args):
+# def get_pretrained_model(args):
+def load_model_from_path(args):
     # model_str = model_name + '_' + dataset + '_' + trn_strategy
     trn_strategy = 'TL' if args.tl else 'FT'  
     model_name = args.model
@@ -116,13 +120,14 @@ def get_pretrained_model(args):
             model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
 
             if args.train_dataset == 'gotcha_no_occ':
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
+                print("model saved in:", pretrained_model_path)
                 # model.load_state_dict(torch.load(pretrained_model_path))
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
                 model.load_state_dict(best_ckpt['model'])
             elif args.train_dataset in ['fows_occ', 'fows_no_occ', 'gotcha_occ']:
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
-                # print("model saved in:", pretrained_model_path)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
+                print("model saved in:", pretrained_model_path)
                 model.load_state_dict(torch.load(pretrained_model_path))
             else:
                 print("no pretrained model found")
@@ -140,7 +145,8 @@ def get_pretrained_model(args):
             model.classifier[1] = nn.Linear(model.last_channel, 1) 
             
             if args.train_dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
+                print("model saved in:", pretrained_model_path)
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
                 model.load_state_dict(best_ckpt['model'])
             else:
@@ -180,13 +186,14 @@ def get_pretrained_model(args):
             model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real of swap face
             
             if args.train_dataset == 'gotcha_no_occ':
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
                 # model.load_state_dict(torch.load(pretrained_model_path))
+                print("model saved in:", pretrained_model_path)
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
                 model.load_state_dict(best_ckpt['model'])
             elif args.train_dataset in ['fows_occ', 'fows_no_occ', 'gotcha_occ']:
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
-                # print("model saved in:", pretrained_model_path)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
+                print("model saved in:", pretrained_model_path)
                 model.load_state_dict(torch.load(pretrained_model_path))
             else:
                 print("no pretrained model found")
@@ -202,8 +209,8 @@ def get_pretrained_model(args):
             # if args.dataset == 'thesis_occ':
             if args.train_dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
                 # pretrained_model_path = get_model_path(model_name, dataset, tl, ft)
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
-                
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
+                print("model saved in:", pretrained_model_path)
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
                 model.load_state_dict(best_ckpt['model'])
         else:
@@ -231,13 +238,13 @@ def get_pretrained_model(args):
             print("loading pretrained model")
 
             if args.train_dataset in ['gotcha_occ', 'gotcha_no_occ']:
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
                 # model.load_state_dict(torch.load(pretrained_model_path))
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
                 model.load_state_dict(best_ckpt['model'])
             elif 'fows_occ' in args.train_dataset or 'fows_no_occ' in args.train_dataset:
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
-                # print("model saved in:", pretrained_model_path)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
+                print("model saved in:", pretrained_model_path)
                 model.load_state_dict(torch.load(pretrained_model_path))
 
             else:
@@ -251,7 +258,7 @@ def get_pretrained_model(args):
             if args.train_dataset in ['fows_occ, fows_no_occ', 'gotcha_occ', 'gotcha_no_occ']:
                 print("loading pretrained FT model")
                 # pretrained_model_path = get_model_path(model_name, dataset, tl, ft)
-                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy)
+                pretrained_model_path = get_model_path(model_name, trn_dataset, trn_strategy, args.model_path)
                 # ------------------------------------------ #
                 # test with Adam optimizer
                 # pretrained_model_path = './results/results_FT/Xception_gotcha_no_occ_ADAM_FT/training/XceptionNet_2025-03-06-11-51-53/best_checkpoint.pth'
@@ -275,11 +282,11 @@ def get_pretrained_model(args):
         print("Model not supported")
         exit()
     
-    return model, model_name, pretrained_model_path
+    return model, model_name
 
 # -------------------------------------------------------------------------------------------- #
 
-def get_train_model(args):
+def get_backbone(args):
     if args.model == 'mnetv2': 
         print("Loading MobileNetV2 model")
 

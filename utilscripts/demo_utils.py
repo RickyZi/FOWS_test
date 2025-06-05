@@ -7,13 +7,11 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.transforms as transforms
 # import torch.models as models
 from torchvision import models
 import timm  # for xception model
 # from torchvision import models
-
-
-# ------------------------------------------------------------------------------------------- #
 from genericpath import exists
 import os
 import mediapipe as mp
@@ -21,136 +19,137 @@ import cv2
 # import numpy as np
 import glob
 import re
+import numpy as np
 
-# mediapipe face detection model
-face_detection_model = mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5)
+# # mediapipe face detection model
+# face_detection_model = mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5)
 
-def sort_paths(path):
-    # given a path to a folder, sort the files in the folder by the number after 'hand_occlusion' or 'obj_occlusion' in the folder
-    path = sorted(path, key=lambda x: int(re.search(r'\d+', x).group()))
-    return path
-
-
-def get_file_name(path):
-    return os.path.basename(path)
-
-def create_subfolders(path):
-    # create the subfolder for the demo
-    os.makedirs(path + '/hand_occlusion')
-    os.makedirs(path + '/obj_occlusion')
-
-# function to extract all the subfolders in a directory
-def extract_subfolders(directory):
-    # return [f.path for f in os.scandir(directory) if f.is_dir()]
-    subfolders = [f.path for f in os.scandir(directory) if f.is_dir()]
-    # return subfolders following the order of the subfolders in the directory (not sorted)
-    # follows the alphabetical order of the subfolders in the directory
-    return subfolders
-
-# function to extract all the files in a directory (following the order of the files in the directory)
-def extract_files(directory):
-    videos = [f.path for f in os.scandir(directory) if f.is_file()]
-    return videos
-    # return [f.path for f in os.scandir(directory) if f.is_file()]
+# def sort_paths(path):
+#     # given a path to a folder, sort the files in the folder by the number after 'hand_occlusion' or 'obj_occlusion' in the folder
+#     path = sorted(path, key=lambda x: int(re.search(r'\d+', x).group()))
+#     return path
 
 
-def face_detection(frame, face_detection_model):
-    # convert frame to RGB
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    # detect faces in the frame
-    results = face_detection_model.process(frame_rgb)
-    return results
+# def get_file_name(path):
+#     return os.path.basename(path)
 
-def extract_face_from_frame(frame, face_bbox):
-    # extract face from frame
-    x, y, w, h = face_bbox
-    face = frame[y:y+h, x:x+w]
-    return face
+# def create_subfolders(path):
+#     # create the subfolder for the demo
+#     os.makedirs(path + '/hand_occlusion')
+#     os.makedirs(path + '/obj_occlusion')
 
-# def enlarge_bbox(bbox_coordinates): # enlarge bbox coordinates by 30%
-#   # resulting bbox coordinates must be bigger than the  original bbox coordinates by 1.3 times
-#     x, y, w, h = bbox_coordinates
-#     x = max(0, x - int(0.15 * w))
-#     y = max(0, y - int(0.15 * h))
-#     w = w + int(0.3 * w)
-#     h = h + int(0.3 * h)
-#     return (x, y, w, h)
+# # function to extract all the subfolders in a directory
+# def extract_subfolders(directory):
+#     # return [f.path for f in os.scandir(directory) if f.is_dir()]
+#     subfolders = [f.path for f in os.scandir(directory) if f.is_dir()]
+#     # return subfolders following the order of the subfolders in the directory (not sorted)
+#     # follows the alphabetical order of the subfolders in the directory
+#     return subfolders
 
-
-def extract_faces_from_videos(vid_paths, out_paths):
-    for vid, out in zip(vid_paths, out_paths):
-        print('extracting faces from video:', vid)  # print video name
-        print('saving faces to:', out)  # print output path
-        # Path to video file
-        vidObj = cv2.VideoCapture(vid)
-        # Used as counter variable
-        count = 0
-        # checks whether frames were extracted
-        success = 1
+# # function to extract all the files in a directory (following the order of the files in the directory)
+# def extract_files(directory):
+#     videos = [f.path for f in os.scandir(directory) if f.is_file()]
+#     return videos
+#     # return [f.path for f in os.scandir(directory) if f.is_file()]
 
 
-        while success and count < 390: # until extracted 390 frames
-            # vidObj object calls read
-            # function extract frames
-            success, image = vidObj.read()
-            # Saves the frames with frame-count
-            # cv2.imwrite(out_path + "/frame%d.jpg" % count, image)
-            results = face_detection(image, face_detection_model)
-            if results.detections:
-                # print(len(results.detections))
-                for detection in results.detections:
-                    bboxC = detection.location_data.relative_bounding_box
-                    ih, iw, _ = image.shape
-                    # x, y, w, h computed from the relative bounding box coordinates (0.0 to 1.0)
-                    # x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
-                    # bboxC.xmin * iw -> x coordinate of the top-left corner of the bbox (xmin * image_width)
-                    # bboxC.ymin * ih -> y coordinate of the top-left corner of the bbox
-                    # bboxC.width * iw -> width of the bbox
-                    # bboxC.height * ih -> height of the bbox
-                    x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
-                    # bboxC = detection.location_data.relative_bounding_box
-                    # ih, iw, _ = image.shape
-                    # multiply bboxC coordinates by the image width and height to get the bbox coordinates in pixels
-                    # print("x:", x)
-                    # print("y:", y)
-                    # print("w:", w)
-                    # print("h:", h)
-                    # face = extract_face_from_frame(image, (x, y, w, h))
-                    # cv2.imwrite(out + "/frame_mediapipe.jpg" , face)
-                    # --------------------------------------------------------------------- #
-                    # enlarge face bbox by 30% (bbox size * 1.3)
-                    x = max(0, x - int(0.15 * w)) # max(0, x - 0.15 * w) -> x coordinate of the top-left corner of the bbox
-                    y = max(0, y - int(0.15 * h)) # max(0, y - 0.15 * h) -> y coordinate of the top-left corner of the bbox
-                    # the 0.15 * w and 0.15 * h are used to go 15% to the left and 15% to the top of the bbox
-                    w = min(iw, w + int(0.3 * w)) # min(iw, w + 0.3 * w) -> width of the bbox
-                    # w * 1.3 = w + 0.3 * w
-                    # iw = image width (in pixels) is the maximum width of the image
-                    # take the min because the width of the bbox cannot be bigger than the width of the image
-                    # the min function is used to avoid the bbox to go out of the image
-                    # remember that the bbox is a rectangle that contains the face in the image
-                    h = min(ih, h + int(0.3 * h)) # min(ih, h + 0.3 * h) -> height of the bbox
-                    # 574x574
-                    # --------------------------------------------------------------------- #
+# def face_detection(frame, face_detection_model):
+#     # convert frame to RGB
+#     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#     # detect faces in the frame
+#     results = face_detection_model.process(frame_rgb)
+#     return results
 
-                    # # enlarge face bbox by 80% while keeping the aspect ratio
-                    # scale_factor = 1.5 # enlarge by 50%
-                    # new_w = int(w * scale_factor)
-                    # new_h = int(h * scale_factor)
-                    # x = max(0, x - (new_w - w) // 2)
-                    # y = max(0, y - (new_h - h) // 2)
-                    # w = min(iw - x, new_w)
-                    # h = min(ih - y, new_h)
-                    # # 574 x 574
-                    # --------------------------------------------------------------------- #
-                    face = extract_face_from_frame(image, (x, y, w, h))
+# def extract_face_from_frame(frame, face_bbox):
+#     # extract face from frame
+#     x, y, w, h = face_bbox
+#     face = frame[y:y+h, x:x+w]
+#     return face
 
-                    # save face
-                    cv2.imwrite(out + "/frame%d.jpg" % count, face)
-                    print(f"saving face from frame{count}")
-                    count += 1
-        print("done")
-        vidObj.release()
-        # cv2.destroyAllWindows()
+# # def enlarge_bbox(bbox_coordinates): # enlarge bbox coordinates by 30%
+# #   # resulting bbox coordinates must be bigger than the  original bbox coordinates by 1.3 times
+# #     x, y, w, h = bbox_coordinates
+# #     x = max(0, x - int(0.15 * w))
+# #     y = max(0, y - int(0.15 * h))
+# #     w = w + int(0.3 * w)
+# #     h = h + int(0.3 * h)
+# #     return (x, y, w, h)
+
+
+# def extract_faces_from_videos(vid_paths, out_paths):
+#     for vid, out in zip(vid_paths, out_paths):
+#         print('extracting faces from video:', vid)  # print video name
+#         print('saving faces to:', out)  # print output path
+#         # Path to video file
+#         vidObj = cv2.VideoCapture(vid)
+#         # Used as counter variable
+#         count = 0
+#         # checks whether frames were extracted
+#         success = 1
+
+
+#         while success and count < 390: # until extracted 390 frames
+#             # vidObj object calls read
+#             # function extract frames
+#             success, image = vidObj.read()
+#             # Saves the frames with frame-count
+#             # cv2.imwrite(out_path + "/frame%d.jpg" % count, image)
+#             results = face_detection(image, face_detection_model)
+#             if results.detections:
+#                 # print(len(results.detections))
+#                 for detection in results.detections:
+#                     bboxC = detection.location_data.relative_bounding_box
+#                     ih, iw, _ = image.shape
+#                     # x, y, w, h computed from the relative bounding box coordinates (0.0 to 1.0)
+#                     # x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
+#                     # bboxC.xmin * iw -> x coordinate of the top-left corner of the bbox (xmin * image_width)
+#                     # bboxC.ymin * ih -> y coordinate of the top-left corner of the bbox
+#                     # bboxC.width * iw -> width of the bbox
+#                     # bboxC.height * ih -> height of the bbox
+#                     x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
+#                     # bboxC = detection.location_data.relative_bounding_box
+#                     # ih, iw, _ = image.shape
+#                     # multiply bboxC coordinates by the image width and height to get the bbox coordinates in pixels
+#                     # print("x:", x)
+#                     # print("y:", y)
+#                     # print("w:", w)
+#                     # print("h:", h)
+#                     # face = extract_face_from_frame(image, (x, y, w, h))
+#                     # cv2.imwrite(out + "/frame_mediapipe.jpg" , face)
+#                     # --------------------------------------------------------------------- #
+#                     # enlarge face bbox by 30% (bbox size * 1.3)
+#                     x = max(0, x - int(0.15 * w)) # max(0, x - 0.15 * w) -> x coordinate of the top-left corner of the bbox
+#                     y = max(0, y - int(0.15 * h)) # max(0, y - 0.15 * h) -> y coordinate of the top-left corner of the bbox
+#                     # the 0.15 * w and 0.15 * h are used to go 15% to the left and 15% to the top of the bbox
+#                     w = min(iw, w + int(0.3 * w)) # min(iw, w + 0.3 * w) -> width of the bbox
+#                     # w * 1.3 = w + 0.3 * w
+#                     # iw = image width (in pixels) is the maximum width of the image
+#                     # take the min because the width of the bbox cannot be bigger than the width of the image
+#                     # the min function is used to avoid the bbox to go out of the image
+#                     # remember that the bbox is a rectangle that contains the face in the image
+#                     h = min(ih, h + int(0.3 * h)) # min(ih, h + 0.3 * h) -> height of the bbox
+#                     # 574x574
+#                     # --------------------------------------------------------------------- #
+
+#                     # # enlarge face bbox by 80% while keeping the aspect ratio
+#                     # scale_factor = 1.5 # enlarge by 50%
+#                     # new_w = int(w * scale_factor)
+#                     # new_h = int(h * scale_factor)
+#                     # x = max(0, x - (new_w - w) // 2)
+#                     # y = max(0, y - (new_h - h) // 2)
+#                     # w = min(iw - x, new_w)
+#                     # h = min(ih - y, new_h)
+#                     # # 574 x 574
+#                     # --------------------------------------------------------------------- #
+#                     face = extract_face_from_frame(image, (x, y, w, h))
+
+#                     # save face
+#                     cv2.imwrite(out + "/frame%d.jpg" % count, face)
+#                     print(f"saving face from frame{count}")
+#                     count += 1
+#         print("done")
+#         vidObj.release()
+#         # cv2.destroyAllWindows()
 
 # ---------------------------------------------------------------- #
 
@@ -626,7 +625,45 @@ def get_model_path(model_weights_path, model_str):
   return model_path
 
 # ------------------------------------------------------------------------------------------- #
-def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, device):
+def get_test_transf():
+    # Transformations for testing data
+    test_transform = transforms.Compose([
+        transforms.Resize((256,256)), 
+        # BICUBIC is used for EfficientNetB4 -> check the documentation
+        # BICUBIC vs BILINEAR -> https://discuss.pytorch.org/t/what-is-the-difference-between-bilinear-and-bicubic-interpolation/20920 
+        transforms.CenterCrop((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    return test_transform
+
+# ------------------------------------------------------------------------------------------- #
+def model_forward_pass(imgs_tensor, model, device): #, fake_imgs_tensor):
+    batch_size = 32
+    model.eval()
+    all_probs = []
+    # fake_all_probs = []
+    # num_batches = int(np.ceil(len(imgs_tensor) / batch_size))
+    with torch.no_grad():
+        for batch_idx, i in enumerate(range(0, len(imgs_tensor), batch_size)):
+            # print(f"Batch {batch_idx+1}/{num_batches}")
+            batch_imgs = imgs_tensor[i:i+batch_size].to(device)
+            outputs = model(batch_imgs)
+            probs = torch.sigmoid(outputs).cpu().numpy().flatten() # Shape: (batch_size,) 
+            # .cpu().numpy() converts the tensor to a numpy array
+            # .flatten() converts the array to a 1D array
+            all_probs.extend(probs)
+
+            # # compute the probabilities for the fake images
+            # fake_batch_imgs = fake_imgs_tensor[i:i+batch_size].to(device)
+            # fake_outputs = model(fake_batch_imgs)
+            # fake_probs_batch = torch.sigmoid(fake_outputs).cpu().numpy().flatten()
+            # fake_all_probs.extend(fake_probs_batch)
+    
+    return all_probs #, fake_all_probs
+
+# ------------------------------------------------------------------------------------------- #
+def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
     # if model_name == 'mnetv2':
     pretrained_model_path = 'model_path_not_found'
     model_str = f"{model_name}_{dataset}_{trn_strategy}"
@@ -665,6 +702,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
             #     model.load_state_dict(torch.load(pretrained_model_path))
 
             pretrained_model_path = get_model_path(model_weights_path, model_str)
+            print("model saved in:", pretrained_model_path)
             best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
             # breakpoint()
             if 'model' in best_ckpt.keys():
@@ -689,7 +727,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
 
             # if dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
             # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            pretrained_model_path = get_model_path(model_weights_path)
+            pretrained_model_path = get_model_path(model_weights_path, model_str)
             print("model saved in:", pretrained_model_path)
             #get_pretrained_path(model_name, dataset, tl, ft)
             # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
@@ -701,13 +739,13 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
             print("no pretrained model found")
             exit()
 
-        model.to(device)
-        print("Model loaded!")
-        # print(model)
-        print("model_name: ", model_name)
-        print("tst_dataset: ", dataset)
-        print("trn_strategy: ", trn_strategy)
-        print("model_path: ", pretrained_model_path)
+        # # model.to(device)
+        # print("Model loaded!")
+        # # print(model)
+        # print("model_name: ", model_name)
+        # print("tst_dataset: ", dataset)
+        # print("trn_strategy: ", trn_strategy)
+        # print("model_path: ", pretrained_model_path)
 
     # elif 'effnetb4' in model_name.lower():
     elif model_name == 'effnetb4':
@@ -731,20 +769,23 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
 
             if dataset == 'gotcha_no_occ':
                 # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path)
+                pretrained_model_path = get_model_path(model_weights_path, model_str)
+                print("model saved in:", pretrained_model_path)
                 #get_pretrained_path(model_name, dataset, tl, ft)
                 # model.load_state_dict(torch.load(pretrained_model_path))
                 # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
                 model.load_state_dict(best_ckpt['model'])
             elif dataset == 'gotcha_occ':
-                pretrained_model_path = get_model_path(model_weights_path)
+                pretrained_model_path = get_model_path(model_weights_path, model_str)
+                print("model saved in:", pretrained_model_path)
                 best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
                 model.load_state_dict(best_ckpt['model'])
 
             elif dataset in ['fows_occ', 'fows_no_occ']:
                 # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path)
+                pretrained_model_path = get_model_path(model_weights_path, model_str)
+                print("model saved in:", pretrained_model_path)
                 #get_pretrained_path(model_name, dataset, tl, ft)
                 # print("model saved in:", pretrained_model_path)
                 # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
@@ -765,7 +806,8 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
             # if args.dataset == 'thesis_occ':
             # if dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
             # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            pretrained_model_path = get_model_path(model_weights_path)
+            pretrained_model_path = get_model_path(model_weights_path, model_str)
+            print("model saved in:", pretrained_model_path)
 
             # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
             best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
@@ -775,12 +817,12 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
             exit()
 
 
-        model.to(device)
-        print("Model loaded!")
-        print("model_name: ", model_name)
-        print("tst_dataset: ", dataset)
-        print("trn_strategy: ", trn_strategy)
-        print("model_path: ", pretrained_model_path)
+        # model.to(device)
+        # print("Model loaded!")
+        # print("model_name: ", model_name)
+        # print("tst_dataset: ", dataset)
+        # print("trn_strategy: ", trn_strategy)
+        # print("model_path: ", pretrained_model_path)
 
     elif model_name == 'xception':
         print("Loading pretrained XceptionNet model...")
@@ -799,7 +841,8 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
 
             if dataset in ['gotcha_occ', 'gotcha_no_occ']:
                 # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path)
+                pretrained_model_path = get_model_path(model_weights_path, model_str)
+                print("model saved in:", pretrained_model_path)
                 # get_pretrained_path(model_name, dataset, tl, ft)
                 # model.load_state_dict(torch.load(pretrained_model_path))
                 # with torch.serialization.safe_globals([BCEWithLogitsLoss]): # Use context manager
@@ -807,7 +850,8 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
                 model.load_state_dict(best_ckpt['model'])
             elif dataset in ['fows_occ', 'fws_no_occ']:
                 # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path)
+                pretrained_model_path = get_model_path(model_weights_path, model_str)
+                print("model saved in:", pretrained_model_path)
                 #get_pretrained_path(model_name, dataset, tl, ft)
                 # print("model saved in:", pretrained_model_path)
                 # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
@@ -824,7 +868,8 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
             if model_name in ['fows_occ, fows_no_occ', 'gotcha_occ', 'gotcha_no_occ']:
                 print("loading pretrained FT model")
                 # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path)
+                pretrained_model_path = get_model_path(model_weights_path, model_str)
+                print("model saved in:", pretrained_model_path)
 
                 # ------------------------------------------ #
                 print("model saved in:", pretrained_model_path)
@@ -835,12 +880,12 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path, 
             print("no pretrained model found")
             exit()
 
-
-        print("model loaded!")
-        print("model_name: ", model_name)
-        print("tst_dataset: ", dataset)
-        print("trn_strategy: ", trn_strategy)
-        print("model_path: ", pretrained_model_path)
+        # model.to(device)
+        # print("model loaded!")
+        # print("model_name: ", model_name)
+        # print("tst_dataset: ", dataset)
+        # print("trn_strategy: ", trn_strategy)
+        # print("model_path: ", pretrained_model_path)
 
     else:
         print("Model not supported")
