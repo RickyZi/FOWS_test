@@ -124,6 +124,7 @@ def main():
     model.to(device)
     print("Model Loaded!")
     print(model)
+    check_model_gradient(model)
     breakpoint()
 
     if args.train_dataset == 'fows_occ':

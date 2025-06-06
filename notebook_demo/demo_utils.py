@@ -452,8 +452,43 @@ def check_num_frames(path):
         if len(image_files) == 100:
             print(f"Directory {root} contains exactly 100 frames.")
 
-# ----------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+def get_test_transf():
+    # Transformations for testing data
+    test_transform = transforms.Compose([
+        transforms.Resize((256,256)), 
+        transforms.CenterCrop((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    ])
+    return test_transform
 
+# ------------------------------------------------------------------------------------------- #
+def model_forward_pass(imgs_tensor, model, device): #, fake_imgs_tensor):
+    batch_size = 32
+    model.eval()
+    all_probs = []
+    # fake_all_probs = []
+    # num_batches = int(np.ceil(len(imgs_tensor) / batch_size))
+    with torch.no_grad():
+        for batch_idx, i in enumerate(range(0, len(imgs_tensor), batch_size)):
+            # print(f"Batch {batch_idx+1}/{num_batches}")
+            batch_imgs = imgs_tensor[i:i+batch_size].to(device)
+            outputs = model(batch_imgs)
+            probs = torch.sigmoid(outputs).cpu().numpy().flatten() # Shape: (batch_size,) 
+            # .cpu().numpy() converts the tensor to a numpy array
+            # .flatten() converts the array to a 1D array
+            all_probs.extend(probs)
+
+            # # compute the probabilities for the fake images
+            # fake_batch_imgs = fake_imgs_tensor[i:i+batch_size].to(device)
+            # fake_outputs = model(fake_batch_imgs)
+            # fake_probs_batch = torch.sigmoid(fake_outputs).cpu().numpy().flatten()
+            # fake_all_probs.extend(fake_probs_batch)
+    
+    return all_probs #, fake_all_probs
+
+# ----------------------------------------------------------------------------------------------- #
 
 def get_pretrained_path(model_name, trn_strategy, dataset, models_path):
     # Check if the model is valid
@@ -465,22 +500,25 @@ def get_pretrained_path(model_name, trn_strategy, dataset, models_path):
         print(f"Dataset {dataset} is not valid")
         sys.exit()
 
+    # Check if the model path exists
+    if not os.path.exists(models_path):
+        print(f"Model path {models_path} does not exist")
+        sys.exit()
+
+
     # Get the model path based on the arguments
-    model_info = model_name + '_' + dataset + ('_FT' if trn_strategy=='ft' else '_TL')
+    model_info = model_name + '_' + dataset + '_' + trn_strategy
+    #('_FT' if trn_strategy=='ft' else '_TL')
     # # '_TL' if tl else
     print("Model info: ", model_info)
 
-    if trn_strategy.lower() == 'tl':
-        models_folder = models_path+'/TL/'
-    else:
-        models_folder = models_path+'/FT/' # to be updated to 'model_weights/FT/' if FT is used
+    # if trn_strategy.lower() == 'tl':
+    #     models_folder = models_path+'/TL/'
+    # else:
+    #     models_folder = models_path+'/FT/' # to be updated to 'model_weights/FT/' if FT is used
     pretrained_model_path = ''
 
-    # Check if the model path exists
-    if not os.path.exists(models_folder):
-        print(f"Model path {models_folder} does not exist")
-        sys.exit()
-
+   
     # navigate all model folders subdirectories and check if the model_info is in any of them
     found = False
     for root, dirs, files in os.walk(models_path):
@@ -519,53 +557,49 @@ def get_model_path(model_weights_path, model_str):
   return model_path
 
 # ------------------------------------------------------------------------------------------- #
-def get_test_transf():
-    # Transformations for testing data
-    test_transform = transforms.Compose([
-        transforms.Resize((256,256)), 
-        # BICUBIC is used for EfficientNetB4 -> check the documentation
-        # BICUBIC vs BILINEAR -> https://discuss.pytorch.org/t/what-is-the-difference-between-bilinear-and-bicubic-interpolation/20920 
-        transforms.CenterCrop((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    return test_transform
-
-# ------------------------------------------------------------------------------------------- #
-def model_forward_pass(imgs_tensor, model, device): #, fake_imgs_tensor):
-    batch_size = 32
-    model.eval()
-    all_probs = []
-    # fake_all_probs = []
-    # num_batches = int(np.ceil(len(imgs_tensor) / batch_size))
-    with torch.no_grad():
-        for batch_idx, i in enumerate(range(0, len(imgs_tensor), batch_size)):
-            # print(f"Batch {batch_idx+1}/{num_batches}")
-            batch_imgs = imgs_tensor[i:i+batch_size].to(device)
-            outputs = model(batch_imgs)
-            probs = torch.sigmoid(outputs).cpu().numpy().flatten() # Shape: (batch_size,) 
-            # .cpu().numpy() converts the tensor to a numpy array
-            # .flatten() converts the array to a 1D array
-            all_probs.extend(probs)
-
-            # # compute the probabilities for the fake images
-            # fake_batch_imgs = fake_imgs_tensor[i:i+batch_size].to(device)
-            # fake_outputs = model(fake_batch_imgs)
-            # fake_probs_batch = torch.sigmoid(fake_outputs).cpu().numpy().flatten()
-            # fake_all_probs.extend(fake_probs_batch)
-    
-    return all_probs #, fake_all_probs
+def check_model_path(model_name, trn_strategy, dataset, model_weights_path):
+    # if model_name == 'mnetv2':
+    pretrained_model_path = 'model_path_not_found'
+    model_str = f"{model_name}_{dataset}_{trn_strategy.upper()}"
+    print(model_str)
+    # print(pretrained_model_path)
+    pretrained_model_path_1 = get_model_path(model_weights_path, model_str)
+    if pretrained_model_path_1:
+        print(f"get_model_path- model found: {pretrained_model_path_1}")
+    else:
+        print("no model found with 'get_model_path' funct")
+    # print(pretrained_model_path_1)
+    print("\n")
+    pretrained_model_path_2 = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+    # print(pretrained_model_path_2)
+    if pretrained_model_path_2:
+        print(f"get_pretrained_path - model found: {pretrained_model_path_2}")
+    else:
+        print("no model found with 'get_pretrained_path' funct")
+    # breakpoint()
 
 # ------------------------------------------------------------------------------------------- #
 def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
     # if model_name == 'mnetv2':
     pretrained_model_path = 'model_path_not_found'
     model_str = f"{model_name}_{dataset}_{trn_strategy}"
+
+
+    # pretrained_model_path_1 = get_model_path(model_weights_path, model_str)
+    # print(pretrained_model_path_1)
+    # pretrained_model_path_2 = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+    # print(pretrained_model_path_2)
+    # breakpoint()
+
+
+    # define the model backbone and load the pretrained weights
+    
     # if 'mnetv2' in model_name.lower():
     if model_name == 'mnetv2':
         print("Loading MobileNetV2 model")
         # model = mobilenet_v2(pretrained=True)
         model = models.mobilenet_v2(weights = 'MobileNet_V2_Weights.IMAGENET1K_V2')
+        model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
         model_name = 'MobileNetV2' # add the model name to the model object
 
         if trn_strategy.lower() == 'tl':
@@ -573,31 +607,9 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
             # --- TRANSFER LEARNING!!! --- #
             # ---------------------------- #
             print("loading pretrained TL model")
-            # # Freeze all layers
-            # for param in model.parameters():
-            #     param.requires_grad = False
-            # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
-
-            # if dataset == 'gotcha_no_occ':
-            #     # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            #     pretrained_model_path = get_model_path(model_weights_path)
-            #     print("model saved in:", pretrained_model_path)
-            #     # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-            #     best_ckpt = torch.load(pretrained_model_path, map_location = "cpu") #, weights_only=False)
-            #     model.load_state_dict(best_ckpt['model'])
-
-            # elif dataset in ['fows_occ', 'fows_no_occ', 'gotcha_occ']:
-            #     # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            #     pretrained_model_path = get_model_path(model_weights_path)
-            #     #get_pretrained_path(model_name, dataset, tl, ft)
-            #     print("model saved in:", pretrained_model_path)
-            #     # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-            #     model.load_state_dict(torch.load(pretrained_model_path))
-
             pretrained_model_path = get_model_path(model_weights_path, model_str)
             print("model saved in:", pretrained_model_path)
-            best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
+            best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
             # breakpoint()
             if 'model' in best_ckpt.keys():
               model.load_state_dict(best_ckpt['model'])
@@ -617,7 +629,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
             # ---------------------- #
             print("loading pretrained FT model")
             # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1)
+            # model.classifier[1] = nn.Linear(model.last_channel, 1)
 
             # if dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
             # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
@@ -627,7 +639,11 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
             # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
 
             best_ckpt = torch.load(pretrained_model_path, map_location='cpu', weights_only= False)
-            model.load_state_dict(best_ckpt['model'])
+            # model.load_state_dict(best_ckpt['model'])
+            if 'model' in best_ckpt.keys():
+              model.load_state_dict(best_ckpt['model'])
+            else:
+              model.load_state_dict(best_ckpt)
             # model.load_state_dict(torch.load(pretrained_model_path))
         else:
             print("no pretrained model found")

@@ -496,122 +496,42 @@ def get_model_path(model_weights_path, model_str):
   return model_path
 
 # ------------------------------------------------------------------------------------------- #
-def get_test_transf():
-    # Transformations for testing data
-    test_transform = transforms.Compose([
-        transforms.Resize((256,256)), 
-        # BICUBIC is used for EfficientNetB4 -> check the documentation
-        # BICUBIC vs BILINEAR -> https://discuss.pytorch.org/t/what-is-the-difference-between-bilinear-and-bicubic-interpolation/20920 
-        transforms.CenterCrop((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
-    return test_transform
-
-# ------------------------------------------------------------------------------------------- #
-def model_forward_pass(imgs_tensor, model, device): #, fake_imgs_tensor):
-    batch_size = 32
-    model.eval()
-    all_probs = []
-    # fake_all_probs = []
-    # num_batches = int(np.ceil(len(imgs_tensor) / batch_size))
-    with torch.no_grad():
-        for batch_idx, i in enumerate(range(0, len(imgs_tensor), batch_size)):
-            # print(f"Batch {batch_idx+1}/{num_batches}")
-            batch_imgs = imgs_tensor[i:i+batch_size].to(device)
-            outputs = model(batch_imgs)
-            probs = torch.sigmoid(outputs).cpu().numpy().flatten() # Shape: (batch_size,) 
-            # .cpu().numpy() converts the tensor to a numpy array
-            # .flatten() converts the array to a 1D array
-            all_probs.extend(probs)
-
-            # # compute the probabilities for the fake images
-            # fake_batch_imgs = fake_imgs_tensor[i:i+batch_size].to(device)
-            # fake_outputs = model(fake_batch_imgs)
-            # fake_probs_batch = torch.sigmoid(fake_outputs).cpu().numpy().flatten()
-            # fake_all_probs.extend(fake_probs_batch)
-    
-    return all_probs #, fake_all_probs
-
-# ------------------------------------------------------------------------------------------- #
-# def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
-def load_model_from_path(model_str, model_weights_path):
+def load_model_from_path(model_name, dataset, trn_strategy, model_weights_path):
     # if model_name == 'mnetv2':
-    pretrained_model_path = 'model_path_not_found'
-    # model_str = f"{model_name}_{dataset}_{trn_strategy}"
-    trn_strategy = model_str.split('_')[-1]
-    model_name = model_str.split('_')[0]
+    # pretrained_model_path = 'model_path_not_found'
+    model_str = f"{model_name}_{dataset}_{trn_strategy}"
+    # trn_strategy = model_str.split('_')[-1]
+    # model_name = model_str.split('_')[0]
+    # dataset = model_str.split('_')[1] + '_' + model_str.split('_')[2]
+
+    pretrained_model_path = get_model_path(model_weights_path, model_str)
+    # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+    if pretrained_model_path:
+        print("model path: ", pretrained_model_path)
+        print("loading the model...")
+    else:
+        print("no pretrained model found")
+        sys.exit()
+
+
     # if 'mnetv2' in model_name.lower():
     if model_name == 'mnetv2':
         print("Loading MobileNetV2 model")
         # model = mobilenet_v2(pretrained=True)
         model = models.mobilenet_v2(weights = 'MobileNet_V2_Weights.IMAGENET1K_V2')
-        model_name = 'MobileNetV2' # add the model name to the model object
-
-        if trn_strategy == 'TL':
-            # ---------------------------- #
-            # --- TRANSFER LEARNING!!! --- #
-            # ---------------------------- #
-            print("loading pretrained TL model")
-            # # Freeze all layers
-            # for param in model.parameters():
-            #     param.requires_grad = False
-            # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
-
-            # if dataset == 'gotcha_no_occ':
-            #     # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            #     pretrained_model_path = get_model_path(model_weights_path)
-            #     print("model saved in:", pretrained_model_path)
-            #     # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-            #     best_ckpt = torch.load(pretrained_model_path, map_location = "cpu") #, weights_only=False)
-            #     model.load_state_dict(best_ckpt['model'])
-
-            # elif dataset in ['fows_occ', 'fows_no_occ', 'gotcha_occ']:
-            #     # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            #     pretrained_model_path = get_model_path(model_weights_path)
-            #     #get_pretrained_path(model_name, dataset, TL, FT)
-            #     print("model saved in:", pretrained_model_path)
-            #     # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-            #     model.load_state_dict(torch.load(pretrained_model_path))
-
-            pretrained_model_path = get_model_path(model_weights_path, model_str)
-            print("model saved in:", pretrained_model_path)
-            best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
-            # breakpoint()
-            if 'model' in best_ckpt.keys():
-              model.load_state_dict(best_ckpt['model'])
-            else:
-              model.load_state_dict(best_ckpt)
-            # else:
-            #     print("no pretrained model found")
-            #     exit()
-
-            print("model saved in:", pretrained_model_path)
-            # print("model loaded!")
-
-        elif trn_strategy == 'FT':
-        # else:
-            # ---------------------- #
-            # --- FINE TUNING!!! --- #
-            # ---------------------- #
-            print("loading pretrained FT model")
-            # Replace the classifier layer
-            model.classifier[1] = nn.Linear(model.last_channel, 1)
-
-            # if dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
-            # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            pretrained_model_path = get_model_path(model_weights_path, model_str)
-            print("model saved in:", pretrained_model_path)
-            #get_pretrained_path(model_name, dataset, TL, FT)
-            # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-
-            best_ckpt = torch.load(pretrained_model_path, map_location='cpu', weights_only= False)
+        # model_name = 'MobileNetV2' # add the model name to the model object
+        # Replace the classifier layer
+        model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
+        
+        # pretrained_model_path = get_model_path(model_weights_path, model_str)
+        # print("model saved in:", pretrained_model_path)
+        best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        # breakpoint()
+        if 'model' in best_ckpt.keys():
             model.load_state_dict(best_ckpt['model'])
-            # model.load_state_dict(torch.load(pretrained_model_path))
         else:
-            print("no pretrained model found")
-            sys.exit()
+            model.load_state_dict(best_ckpt)
+        
 
         # # model.to(device)
         # print("Model loaded!")
@@ -625,70 +545,79 @@ def load_model_from_path(model_str, model_weights_path):
     elif model_name == 'effnetb4':
         print("Loading EfficientNetB4 model")
         model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1')
-        model_name = 'EfficientNet_B4' # add the model name to the model object
+        # model_name = 'EfficientNet_B4' # add the model name to the model object
+        model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real of swap face
 
-        # load the pre-trained model for testing (load model weights)
-        if trn_strategy == 'TL':
-            # ---------------------------- #
-            # --- TRANSFER LEARNING!!! --- #
-            # ---------------------------- #
-            print("loading pretrained TL model")
-            # Freeze all layers
-            for param in model.parameters():
-                param.requires_grad = False
-
-            # Replace the classifier layer
-            # model._fc = nn.Linear(model._fc.in_features, 1) # only 1 output -> prob of real of swap face
-            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real of swap face
-
-            if dataset == 'gotcha_no_occ':
-                # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path, model_str)
-                print("model saved in:", pretrained_model_path)
-                #get_pretrained_path(model_name, dataset, TL, FT)
-                # model.load_state_dict(torch.load(pretrained_model_path))
-                # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-                best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
-                model.load_state_dict(best_ckpt['model'])
-            elif dataset == 'gotcha_occ':
-                pretrained_model_path = get_model_path(model_weights_path, model_str)
-                print("model saved in:", pretrained_model_path)
-                best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
-                model.load_state_dict(best_ckpt['model'])
-
-            elif dataset in ['fows_occ', 'fows_no_occ']:
-                # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path, model_str)
-                print("model saved in:", pretrained_model_path)
-                #get_pretrained_path(model_name, dataset, TL, FT)
-                # print("model saved in:", pretrained_model_path)
-                # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-
-                model.load_state_dict(pretrained_model_path)
-            else:
-                print("no pretrained model found")
-                sys.exit()
-
-        elif trn_strategy == 'FT':
-        # else:
-            # ---------------------- #
-            # --- FINE TUNING!!! --- #
-            # ---------------------- #
-            print("loading pretrained FT model")
-            # Replace the classifier layer
-            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1)
-            # if args.dataset == 'thesis_occ':
-            # if dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
-            # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-            pretrained_model_path = get_model_path(model_weights_path, model_str)
-            print("model saved in:", pretrained_model_path)
-
-            # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-            best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        # breakpoint()
+        if 'model' in best_ckpt.keys():
             model.load_state_dict(best_ckpt['model'])
         else:
-            print("no pretrained model found")
-            sys.exit()
+            model.load_state_dict(best_ckpt)
+
+
+        # # load the pre-trained model for testing (load model weights)
+        # if trn_strategy == 'TL':
+        #     # ---------------------------- #
+        #     # --- TRANSFER LEARNING!!! --- #
+        #     # ---------------------------- #
+        #     print("loading pretrained TL model")
+        #     # Freeze all layers
+        #     # for param in model.parameters():
+        #     #     param.requires_grad = False
+
+        #     # Replace the classifier layer
+        #     # model._fc = nn.Linear(model._fc.in_features, 1) # only 1 output -> prob of real of swap face
+            
+
+        #     if dataset == 'gotcha_no_occ':
+        #         # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+        #         pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #         print("model saved in:", pretrained_model_path)
+        #         #get_pretrained_path(model_name, dataset, TL, FT)
+        #         # model.load_state_dict(torch.load(pretrained_model_path))
+        #         # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
+        #         best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        #         model.load_state_dict(best_ckpt['model'])
+        #     elif dataset == 'gotcha_occ':
+        #         pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #         print("model saved in:", pretrained_model_path)
+        #         best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        #         model.load_state_dict(best_ckpt['model'])
+
+        #     elif dataset in ['fows_occ', 'fows_no_occ']:
+        #         # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+        #         pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #         print("model saved in:", pretrained_model_path)
+        #         #get_pretrained_path(model_name, dataset, TL, FT)
+        #         # print("model saved in:", pretrained_model_path)
+        #         # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
+
+        #         model.load_state_dict(pretrained_model_path)
+        #     else:
+        #         print("no pretrained model found")
+        #         sys.exit()
+
+        # elif trn_strategy == 'FT':
+        # # else:
+        #     # ---------------------- #
+        #     # --- FINE TUNING!!! --- #
+        #     # ---------------------- #
+        #     print("loading pretrained FT model")
+        #     # Replace the classifier layer
+        #     model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1)
+        #     # if args.dataset == 'thesis_occ':
+        #     # if dataset in ['fows_occ', 'gotcha_occ', 'fows_no_occ', 'gotcha_no_occ']:
+        #     # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+        #     pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #     print("model saved in:", pretrained_model_path)
+
+        #     # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
+        #     best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        #     model.load_state_dict(best_ckpt['model'])
+        # else:
+        #     print("no pretrained model found")
+        #     sys.exit()
 
 
         # model.to(device)
@@ -704,55 +633,61 @@ def load_model_from_path(model_str, model_weights_path):
         # pip install timm
         # import timm
         model = timm.create_model('xception', pretrained=True, num_classes=1) # only 1 output -> prob of real of swap face
-        model_name = 'XceptionNet' # add the model name to the model object
+        # model_name = 'XceptionNet' # add the model name to the model object
         # load the pre-trained model for testing (load model weights)
-        # pretrained_model_path = args.save_model_path
-        if trn_strategy == 'TL':
-            # ---------------------------- #
-            # --- TRANSFER LEARNING!!! --- #
-            # ---------------------------- #
-            print("loading pretrained model")
-
-            if dataset in ['gotcha_occ', 'gotcha_no_occ']:
-                # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path, model_str)
-                print("model saved in:", pretrained_model_path)
-                # get_pretrained_path(model_name, dataset, TL, FT)
-                # model.load_state_dict(torch.load(pretrained_model_path))
-                # with torch.serialization.safe_globals([BCEWithLogitsLoss]): # Use context manager
-                best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
-                model.load_state_dict(best_ckpt['model'])
-            elif dataset in ['fows_occ', 'fws_no_occ']:
-                # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path, model_str)
-                print("model saved in:", pretrained_model_path)
-                #get_pretrained_path(model_name, dataset, TL, FT)
-                # print("model saved in:", pretrained_model_path)
-                # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-                model.load_state_dict(torch.load(pretrained_model_path))
-
-            else:
-                print("no pretrained model found")
-                sys.exit()
-
-        elif trn_strategy == 'FT':
-            # ---------------------- #
-            # --- FINE TUNING!!! --- #
-            # ---------------------- #
-            if model_name in ['fows_occ, fows_no_occ', 'gotcha_occ', 'gotcha_no_occ']:
-                print("loading pretrained FT model")
-                # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
-                pretrained_model_path = get_model_path(model_weights_path, model_str)
-                print("model saved in:", pretrained_model_path)
-
-                # ------------------------------------------ #
-                print("model saved in:", pretrained_model_path)
-                # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
-                best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
-                model.load_state_dict(best_ckpt['model'])
+        best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        if 'model' in best_ckpt.keys():
+            model.load_state_dict(best_ckpt['model'])
         else:
-            print("no pretrained model found")
-            sys.exit()
+            model.load_state_dict(torch.load(pretrained_model_path))
+
+        # # pretrained_model_path = args.save_model_path
+        # if trn_strategy == 'TL':
+        #     # ---------------------------- #
+        #     # --- TRANSFER LEARNING!!! --- #
+        #     # ---------------------------- #
+        #     print("loading pretrained model")
+
+        #     if dataset in ['gotcha_occ', 'gotcha_no_occ']:
+        #         # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+        #         pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #         print("model saved in:", pretrained_model_path)
+        #         # get_pretrained_path(model_name, dataset, TL, FT)
+        #         # model.load_state_dict(torch.load(pretrained_model_path))
+        #         # with torch.serialization.safe_globals([BCEWithLogitsLoss]): # Use context manager
+        #         best_ckpt = torch.load(pretrained_model_path, map_location = "cpu", weights_only=False)
+        #         model.load_state_dict(best_ckpt['model'])
+        #     elif dataset in ['fows_occ', 'fws_no_occ']:
+        #         # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+        #         pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #         print("model saved in:", pretrained_model_path)
+        #         #get_pretrained_path(model_name, dataset, TL, FT)
+        #         # print("model saved in:", pretrained_model_path)
+        #         # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
+        #         model.load_state_dict(torch.load(pretrained_model_path))
+
+        #     else:
+        #         print("no pretrained model found")
+        #         sys.exit()
+
+        # elif trn_strategy == 'FT':
+        #     # ---------------------- #
+        #     # --- FINE TUNING!!! --- #
+        #     # ---------------------- #
+        #     if model_name in ['fows_occ, fows_no_occ', 'gotcha_occ', 'gotcha_no_occ']:
+        #         print("loading pretrained FT model")
+        #         # pretrained_model_path = get_pretrained_path(model_name, trn_strategy, dataset, model_weights_path)
+        #         pretrained_model_path = get_model_path(model_weights_path, model_str)
+        #         print("model saved in:", pretrained_model_path)
+
+        #         # ------------------------------------------ #
+        #         # print("model saved in:", pretrained_model_path)
+        #         # with torch.serialization.safe_globals([FocalLoss]): # Use context manager
+        #         best_ckpt = torch.load(pretrained_model_path, map_location = "cpu")
+        #         model.load_state_dict(best_ckpt['model'])
+        # else:
+        #     print("no pretrained model found")
+        #     sys.exit()
 
         # model.to(device)
         # print("model loaded!")
@@ -766,3 +701,315 @@ def load_model_from_path(model_str, model_weights_path):
         sys.exit()
 
     return model, pretrained_model_path
+
+# --------------------------------------------------------- #
+
+def get_backbone(args):
+    if args.model == 'mnetv2': 
+        print("Loading MobileNetV2 model")
+
+        if args.tl and args.resume:
+            print("Resume training from checkpoint for MobileNetV2")
+            print("checkpoint path:", args.resume)
+            pretrained_model_path = args.resume
+            model_name = "MobileNetV2_TL"
+            checkpoint = torch.load(args.resume, map_location = "cpu")
+            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
+            model.load_state_dict(checkpoint['model'])
+            # model.to(device)
+            print('Model loaded!')
+
+        elif args.tl:
+            print("Loading MobileNetV2 pre-trained model")
+            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
+            print("Transfer learning - Freezing all layers except the classifier")
+            # Freeze all layers
+            for param in model.parameters():
+                param.requires_grad = False
+            
+            # Replace the classifier layer
+            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
+
+            # check the model gradient
+            # check_model_gradient(model)
+            # ()
+            model_name = 'MobileNetV2_TL' # add the model name to the model object
+        
+        elif args.ft:
+            print("Fine-Tuning MobileNetV2 pre-trained model")
+            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
+            print("Transfer learning - Freezing all layers except the classifier")
+            # # Freeze all layers
+            # for param in model.parameters():
+            #     param.requires_grad = False
+            
+            # Replace the classifier layer
+            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
+            if args.resume:
+                # if args.tl and args.resume:
+                print("Resume training from checkpoint for MobileNetV2")
+                print("checkpoint path:", args.resume)
+                pretrained_model_path = args.resume
+                # model_name = "XceptionNet_TL"
+                checkpoint = torch.load(args.resume, map_location = "cpu")
+                # model = timm.create_model('xception', pretrained=True)
+                model.load_state_dict(checkpoint['model'])
+            # check the model gradient
+            # check_model_gradient(model)
+            # ()
+            model_name = 'MobileNetV2_FT' # add the model name to the model object
+
+        else:
+            # print("problem in loading the model")
+            # exit()
+            print("Loading MobileNetV2 pre-trained model")
+            model = models.mobilenet_v2(weights='MobileNet_V2_Weights.IMAGENET1K_V2')
+            # Replace the classifier layer
+            model.classifier[1] = nn.Linear(model.last_channel, 1) # only 1 output -> prob of real of swap face
+
+            # check the model gradient
+            # check_model_gradient(model)
+            # ()
+            model_name = 'MobileNetV2' # add the model name to the model object
+
+        # model.to(device)
+        # print("Model loaded!")
+
+        # # print(model)
+        # # ()
+        # # exit()
+
+    elif args.model == 'effnetb4':
+        print("Loading EfficientNetB4 model")
+        # model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1')
+        # pip install efficientnet_pytorch
+        # run this command to install the efficientnet model
+        # model = EfficientNet.from_pretrained('efficientnet-b4')
+
+        if args.tl: # and args.resume != '':
+            print("Loading EfficientNetB4 pre-trained model")
+            model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1') # correct way to call pre-trained model
+            # https://pytorch.org/vision/main/models/generated/torchvision.models.efficientnet_b4.html
+            print("Transfer learning - Freezing all layers except the classifier")
+            # Freeze all layers
+            for param in model.parameters():
+                param.requires_grad = False
+            
+            # Replace the classifier layer
+            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real or swap face
+            # last layer of EfficientNetB4 is a Linear layer (classifier) with 1000 outputs (for ImageNet) -> change it to 1 output
+            
+            # if args.resume:
+            #     print("Resume training from checkpoint for EfficientNetB4")
+            #     checkpoint = torch.load(args.resume, map_location = "cpu")
+            #     pretrained_model_path = args.resume
+            #     model.load_state_dict(checkpoint['model'])
+            #     # if 'optimizer' in checkpoint and 'epoch' in checkpoint and 'criterion' in checkpoint:
+            #     #     optimizer.load_state_dict(checkpoint['optimizer'])
+            #     #     # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            #     #     start_epoch = checkpoint['epoch'] +1 
+            #     #     criterion = checkpoint['criterion']
+
+            #     print("model loaded!")
+            #     print("model info:")
+            #     print("epoch: ", checkpoint['epoch'])
+            #     # print("train_loss: ", checkpoint['train_loss'])
+            #     print("val_loss: ", checkpoint['val_loss'])
+            #     # print("train_accuracy: ", checkpoint['train_accuracy'])
+            #     print("val_accuracy: ", checkpoint['val_accuracy'])
+            #     print("optimizer: ", checkpoint['optimizer'])
+            #     print("criterion: ", checkpoint['criterion'])
+            #     print("last_epoch: ", checkpoint['epoch'])
+
+            model_name = 'EfficientNet_B4' # add the model name to the model object
+            # model.to(device)
+            # # check the model gradient
+            # check_model_gradient(model)
+            # # ()
+        # ------------------------------------------------------------------------ #
+        elif args.ft: 
+            print("Fine-Tuning the EfficientNetB4 pre-trained model")
+            model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1') # correct way to call pre-trained model
+            # Replace the classifier layer
+            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1) # modify the last layer of the classifier to have 1 output -> prob of real or swap face
+            model_name = 'EfficientNet_B4_FT'
+
+            # if args.resume:
+            #     print("Resume training from checkpoint for EfficientNetB4")
+            #     print("checkpoint path:", args.resume)
+            #     pretrained_model_path = args.resume
+
+            #     # check if checkpoint file is ok
+            #     if os.path.isfile(args.resume):
+            #         try:
+            #             checkpoint = torch.load(args.resume, map_location="cpu")
+            #             print("Checkpoint loaded successfully.")
+            #         except RuntimeError as e:
+            #             print(f"Error loading checkpoint: {e}")
+            #     else:
+            #         print(f"Checkpoint file {args.resume} does not exist.")
+
+            #     checkpoint = torch.load(args.resume, map_location = "cpu")
+            #     checkpoint.keys() # check the keys in the checkpoint
+            #     # ()
+            #     model.load_state_dict(checkpoint['model'])
+            #     print("model loaded!")
+            #     print("model info:")
+            #     print("epoch: ", checkpoint['epoch'])
+            #     # print("train_loss: ", checkpoint['train_loss'])
+            #     print("val_loss: ", checkpoint['val_loss'])
+            #     # print("train_accuracy: ", checkpoint['train_accuracy'])
+            #     print("val_accuracy: ", checkpoint['val_accuracy'])
+            #     print("optimizer: ", checkpoint['optimizer'])
+            #     print("criterion: ", checkpoint['criterion'])
+            #     print("last_epoch: ", checkpoint['epoch'])
+            
+            # # model.to(device)
+            # # # check the model gradient
+            # # check_model_gradient(model)
+            # # # ()
+
+            
+        else: 
+            # print("problem in loading the model")
+            # exit()
+            print("Loading EfficientNetB4 pre-trained model")
+            model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1') # correct way to call pre-trained model
+            # Replace the classifier layer
+            model.classifier[-1] = nn.Linear(model.classifier[-1].in_features, 1)
+            # model.to(device)
+            model_name = 'EfficientNet_B4' # add the model name to the model object
+        # load the pre-trained model for testing (load model weights)
+        # pretrained_model_path = args.save_model_path 
+        # print("model saved in:", pretrained_model_path)
+        # model.load_state_dict(torch.load(pretrained_model_path)) 
+        # model.to(device)
+        print("Model loaded!")
+
+        # print(model)
+        # exit()
+        
+    elif args.model == 'xception':
+        # print("Loading pretrained XceptionNet model...")
+        # load the xceptionet model
+        # pip install timm
+        # import timm
+
+        # if args.tl and args.resume:
+        #     print("Resume training from checkpoint for XceptionNet")
+        #     print("checkpoint path:", args.resume)
+        #     model_name = "XceptionNet_TL"
+        #     checkpoint = torch.load(args.resume, map_location = "cpu")
+        #     model = timm.create_model('xception', pretrained=True)
+        #     model.load_state_dict(checkpoint['model'])
+        #     model.to(device)
+        #     print('Model loaded!')
+
+
+        if args.tl:
+            print("Loading XceptionNet pre-trained model - Transfer learning - Freezing all layers except the classifier")
+            # print("Transfer learning - Freezing all layers except the classifier")
+            model = timm.create_model('xception', pretrained=True) #, num_classes=1) # only 1 output -> prob of real or swap face
+            model_name = 'XceptionNet' # add the model name to the model object
+            # print("Transfer learning - Freezing all layers except the classifier")
+            # Freeze all layers except the classifier
+            for param in model.parameters():
+                param.requires_grad = False
+
+            # Replace the classifier layer
+            in_features = model.get_classifier().in_features
+            model.fc = nn.Linear(in_features, 1)  # modify the last layer of the classifier to have 1 output -> prob of real or swap face
+
+            # Ensure the classifier layer is trainable
+            for param in model.fc.parameters():
+                param.requires_grad = True
+           
+            # # check the model gradient
+            # check_model_gradient(model)
+
+            if args.resume:
+                # if args.tl and args.resume:
+                print("Resume training from checkpoint for XceptionNet")
+                print("checkpoint path:", args.resume)
+                pretrained_model_path = args.resume
+                model_name = "XceptionNet_TL"
+                checkpoint = torch.load(args.resume, map_location = "cpu")
+                # model = timm.create_model('xception', pretrained=True)
+                model.load_state_dict(checkpoint['model'])
+                # model.to(device)
+                # print('Model loaded!')
+
+            # print('Model loaded!')
+            # model.to(device)
+
+        elif args.ft: 
+            print("Fine Tuning XceptionNet pre-trained model")
+            # print("Transfer learning - Freezing all layers except the classifier")
+            model = timm.create_model('xception', pretrained=True) #, num_classes=1) # only 1 output -> prob of real or swap face
+            model_name = 'XceptionNet' # add the model name to the model object
+            # print("Transfer learning - Freezing all layers except the classifier")
+            # Freeze all layers except the classifier
+            # for param in model.parameters():
+            #     param.requires_grad = False
+
+            # Replace the classifier layer
+            in_features = model.get_classifier().in_features
+            model.fc = nn.Linear(in_features, 1)  # modify the last layer of the classifier to have 1 output -> prob of real or swap face
+
+            # # Ensure the classifier layer is trainable
+            # for param in model.fc.parameters():
+            #     param.requires_grad = True
+            if args.resume:
+                # if args.tl and args.resume:
+                print("Resume training from checkpoint for XceptionNet")
+                print("checkpoint path:", args.resume)
+                pretrained_model_path = args.resume
+                model_name = "XceptionNet_TL"
+                checkpoint = torch.load(args.resume, map_location = "cpu")
+                # model = timm.create_model('xception', pretrained=True)
+                model.load_state_dict(checkpoint['model'])
+            # check the model gradient
+            # check_model_gradient(model)
+
+        else: 
+            # print("problem in loading the model")
+            # exit()
+            print("Loading XceptionNet pre-trained model")
+            model = timm.create_model('xception', pretrained=True) #, num_classes=1) # only 1 output -> prob of real or swap face
+            model_name = 'XceptionNet' # add the model name to the model object
+            # print("Transfer learning - Freezing all layers except the classifier")
+            # # Freeze all layers except the classifier
+            # for param in model.parameters():
+            #     param.requires_grad = False
+
+            # Replace the classifier layer
+            in_features = model.get_classifier().in_features
+            model.fc = nn.Linear(in_features, 1)  # modify the last layer of the classifier to have 1 output -> prob of real or swap face
+
+            # Ensure the classifier layer is trainable
+            for param in model.fc.parameters():
+                param.requires_grad = True
+           
+            # check the model gradient
+            # check_model_gradient(model)
+        # else:
+        #     # retraining the model with one output class 
+        #     model = timm.create_model('xception', pretrained=True, num_classes=1) # only 1 output -> prob of real or swap face
+        #     model_name = 'XceptionNet' # add the model name to the model object
+
+        
+
+        # model.to(device)
+        # print("Model loaded!")
+
+        print(model)
+        # exit()
+        # check the model gradient
+        # check_model_gradient(model)
+
+
+    else:
+        print("Model not supported")
+        exit()
+
+    return model, model_name
