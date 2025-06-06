@@ -2,6 +2,7 @@
 ## slight variation wrt the one used for trn/tst models
 
 import os
+import shutil
 import sys
 import argparse
 import torch
@@ -13,143 +14,49 @@ from torchvision import models
 import timm  # for xception model
 # from torchvision import models
 from genericpath import exists
-import os
-import mediapipe as mp
+# import mediapipe as mp
 import cv2
 # import numpy as np
 import glob
 import re
 import numpy as np
 
-# # mediapipe face detection model
-# face_detection_model = mp.solutions.face_detection.FaceDetection(model_selection=0, min_detection_confidence=0.5)
+# ---------------------------------------------------------------- #
+# Focal loss definition
+# taken from: https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
+# default values: alpha = 0.25, gamma = 2 ->  https://pytorch.org/vision/main/_modules/torchvision/ops/focal_loss.html
+# ------------------------------------------------------- #
+# converted as a class to define it as criterion 
+class FocalLoss(nn.Module):
+    def __init__(self, alpha: float = -1, gamma: float = 2, reduction: str = "mean"): # changed default reduction to mean instead of none
+        super(FocalLoss, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.reduction = reduction
 
-# def sort_paths(path):
-#     # given a path to a folder, sort the files in the folder by the number after 'hand_occlusion' or 'obj_occlusion' in the folder
-#     path = sorted(path, key=lambda x: int(re.search(r'\d+', x).group()))
-#     return path
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        inputs = inputs.float()
+        targets = targets.float()
+        p = torch.sigmoid(inputs)
+        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+        p_t = p * targets + (1 - p) * (1 - targets)
+        loss = ce_loss * ((1 - p_t) ** self.gamma)
 
+        if self.alpha >= 0:
+            alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
+            loss = alpha_t * loss
 
-# def get_file_name(path):
-#     return os.path.basename(path)
+        # if self.reduction == "none":
+            # pass
+            # loss = loss.mean() # Reduce the loss to a scalar before passing it to backward
+            # to reduce loss to a scalar in case of batch of images -> loss.mean() or loss.sum()
+            # -> change deafualt reduction to mean
+        if self.reduction == "mean":
+            loss = loss.mean()
+        elif self.reduction == "sum":
+            loss = loss.sum()
 
-# def create_subfolders(path):
-#     # create the subfolder for the demo
-#     os.makedirs(path + '/hand_occlusion')
-#     os.makedirs(path + '/obj_occlusion')
-
-# # function to extract all the subfolders in a directory
-# def extract_subfolders(directory):
-#     # return [f.path for f in os.scandir(directory) if f.is_dir()]
-#     subfolders = [f.path for f in os.scandir(directory) if f.is_dir()]
-#     # return subfolders following the order of the subfolders in the directory (not sorted)
-#     # follows the alphabetical order of the subfolders in the directory
-#     return subfolders
-
-# # function to extract all the files in a directory (following the order of the files in the directory)
-# def extract_files(directory):
-#     videos = [f.path for f in os.scandir(directory) if f.is_file()]
-#     return videos
-#     # return [f.path for f in os.scandir(directory) if f.is_file()]
-
-
-# def face_detection(frame, face_detection_model):
-#     # convert frame to RGB
-#     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#     # detect faces in the frame
-#     results = face_detection_model.process(frame_rgb)
-#     return results
-
-# def extract_face_from_frame(frame, face_bbox):
-#     # extract face from frame
-#     x, y, w, h = face_bbox
-#     face = frame[y:y+h, x:x+w]
-#     return face
-
-# # def enlarge_bbox(bbox_coordinates): # enlarge bbox coordinates by 30%
-# #   # resulting bbox coordinates must be bigger than the  original bbox coordinates by 1.3 times
-# #     x, y, w, h = bbox_coordinates
-# #     x = max(0, x - int(0.15 * w))
-# #     y = max(0, y - int(0.15 * h))
-# #     w = w + int(0.3 * w)
-# #     h = h + int(0.3 * h)
-# #     return (x, y, w, h)
-
-
-# def extract_faces_from_videos(vid_paths, out_paths):
-#     for vid, out in zip(vid_paths, out_paths):
-#         print('extracting faces from video:', vid)  # print video name
-#         print('saving faces to:', out)  # print output path
-#         # Path to video file
-#         vidObj = cv2.VideoCapture(vid)
-#         # Used as counter variable
-#         count = 0
-#         # checks whether frames were extracted
-#         success = 1
-
-
-#         while success and count < 390: # until extracted 390 frames
-#             # vidObj object calls read
-#             # function extract frames
-#             success, image = vidObj.read()
-#             # Saves the frames with frame-count
-#             # cv2.imwrite(out_path + "/frame%d.jpg" % count, image)
-#             results = face_detection(image, face_detection_model)
-#             if results.detections:
-#                 # print(len(results.detections))
-#                 for detection in results.detections:
-#                     bboxC = detection.location_data.relative_bounding_box
-#                     ih, iw, _ = image.shape
-#                     # x, y, w, h computed from the relative bounding box coordinates (0.0 to 1.0)
-#                     # x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
-#                     # bboxC.xmin * iw -> x coordinate of the top-left corner of the bbox (xmin * image_width)
-#                     # bboxC.ymin * ih -> y coordinate of the top-left corner of the bbox
-#                     # bboxC.width * iw -> width of the bbox
-#                     # bboxC.height * ih -> height of the bbox
-#                     x, y, w, h = int(bboxC.xmin * iw), int(bboxC.ymin * ih), int(bboxC.width * iw), int(bboxC.height * ih)
-#                     # bboxC = detection.location_data.relative_bounding_box
-#                     # ih, iw, _ = image.shape
-#                     # multiply bboxC coordinates by the image width and height to get the bbox coordinates in pixels
-#                     # print("x:", x)
-#                     # print("y:", y)
-#                     # print("w:", w)
-#                     # print("h:", h)
-#                     # face = extract_face_from_frame(image, (x, y, w, h))
-#                     # cv2.imwrite(out + "/frame_mediapipe.jpg" , face)
-#                     # --------------------------------------------------------------------- #
-#                     # enlarge face bbox by 30% (bbox size * 1.3)
-#                     x = max(0, x - int(0.15 * w)) # max(0, x - 0.15 * w) -> x coordinate of the top-left corner of the bbox
-#                     y = max(0, y - int(0.15 * h)) # max(0, y - 0.15 * h) -> y coordinate of the top-left corner of the bbox
-#                     # the 0.15 * w and 0.15 * h are used to go 15% to the left and 15% to the top of the bbox
-#                     w = min(iw, w + int(0.3 * w)) # min(iw, w + 0.3 * w) -> width of the bbox
-#                     # w * 1.3 = w + 0.3 * w
-#                     # iw = image width (in pixels) is the maximum width of the image
-#                     # take the min because the width of the bbox cannot be bigger than the width of the image
-#                     # the min function is used to avoid the bbox to go out of the image
-#                     # remember that the bbox is a rectangle that contains the face in the image
-#                     h = min(ih, h + int(0.3 * h)) # min(ih, h + 0.3 * h) -> height of the bbox
-#                     # 574x574
-#                     # --------------------------------------------------------------------- #
-
-#                     # # enlarge face bbox by 80% while keeping the aspect ratio
-#                     # scale_factor = 1.5 # enlarge by 50%
-#                     # new_w = int(w * scale_factor)
-#                     # new_h = int(h * scale_factor)
-#                     # x = max(0, x - (new_w - w) // 2)
-#                     # y = max(0, y - (new_h - h) // 2)
-#                     # w = min(iw - x, new_w)
-#                     # h = min(ih - y, new_h)
-#                     # # 574 x 574
-#                     # --------------------------------------------------------------------- #
-#                     face = extract_face_from_frame(image, (x, y, w, h))
-
-#                     # save face
-#                     cv2.imwrite(out + "/frame%d.jpg" % count, face)
-#                     print(f"saving face from frame{count}")
-#                     count += 1
-#         print("done")
-#         vidObj.release()
-#         # cv2.destroyAllWindows()
+        return loss
 
 # ---------------------------------------------------------------- #
 
@@ -468,9 +375,6 @@ no_occ_frames = [
     ]
 
 
-import os
-import shutil
-
 # check if real and fake frames have the same frames names
 def check_frames(frames):
     real_frames = frames['original_obj_occ']
@@ -482,22 +386,12 @@ def organize_frames(dataset_path, save_path):
     for root, dirs, files in os.walk(dataset_path):
         for file in files:
             if file.endswith('.jpg') or file.endswith('.png'):
-                # print("Found file:", file) # i.e. frame0.jpg
-                # print("In directory:", root) # user_faces/fake/hand_occlusion
-                # breakpoint()
-
                 # fix the / in the root path
                 root = root.replace('\\', '/')
-                print("Fixed root path:", root) # user_faces/fake/hand_occlusion
-                # breakpoint()
-
                 save_frame_path = os.path.join(save_path, root.split('/')[-1], root.split('/')[-2])
                 # print("Frames path:", save_frame_path) # preprocessed_faces/fake/hand_occlusion
                 if not os.path.exists(save_frame_path):
                     os.makedirs(save_frame_path, exist_ok=True)
-
-                # breakpoint()
-
                 # root = path to frames dir
                 occ_save_frame_path = os.path.join(save_frame_path, 'occ')
                 no_occ_save_frame_path = os.path.join(save_frame_path, 'no_occ')
@@ -509,7 +403,7 @@ def organize_frames(dataset_path, save_path):
                 if not os.path.exists(no_occ_save_frame_path):
                     os.makedirs(no_occ_save_frame_path, exist_ok=True) # exist_ok=True will not raise an error if the directory already exists
                 # breakpoint()
-                print("root:", root)
+                # print("root:", root)
                 # ----------------------------------------------------------------------------------------------- #
 
                 # Move the frames to the respective directories following the structure in the hardcoded frames
@@ -548,7 +442,8 @@ def organize_frames(dataset_path, save_path):
                         # print(f"File {file} does not match any hardcoded frames for object occlusion, skipping.")
                         continue
                 else:
-                    print(f"Directory {root} does not match any hardcoded frames, skipping.")
+                    # print(f"Directory {root} does not match any hardcoded frames, skipping.")
+                    continue
 # ----------------------------------------------------------------------------------------------- #
 
 def check_num_frames(path):
@@ -565,11 +460,11 @@ def get_pretrained_path(model_name, trn_strategy, dataset, models_path):
     # Check if the model is valid
     if model_name not in ['mnetv2', 'effnetb4', 'xception']: #, 'icpr2020', 'neurips2023']:
         print(f"Model {model_name} is not supported")
-        exit()
+        sys.exit()
     # Check if the dataset is valid
     if dataset not in ['fows_occ', 'fows_no_occ', 'gotcha_occ', 'gotcha_no_occ']:
         print(f"Dataset {dataset} is not valid")
-        exit()
+        sys.exit()
 
     # Get the model path based on the arguments
     model_info = model_name + '_' + dataset + ('_FT' if trn_strategy=='ft' else '_TL')
@@ -585,7 +480,7 @@ def get_pretrained_path(model_name, trn_strategy, dataset, models_path):
     # Check if the model path exists
     if not os.path.exists(models_folder):
         print(f"Model path {models_folder} does not exist")
-        exit()
+        sys.exit()
 
     # navigate all model folders subdirectories and check if the model_info is in any of them
     found = False
@@ -607,7 +502,7 @@ def get_pretrained_path(model_name, trn_strategy, dataset, models_path):
 
     if not found:
         print(f"NO model {model_name} found in {model_name}")
-        exit()
+        sys.exit()
 
     print(f"Pretrained model path: {pretrained_model_path}")
 
@@ -674,7 +569,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
         model = models.mobilenet_v2(weights = 'MobileNet_V2_Weights.IMAGENET1K_V2')
         model_name = 'MobileNetV2' # add the model name to the model object
 
-        if trn_strategy == 'tl':
+        if trn_strategy.lower() == 'tl':
             # ---------------------------- #
             # --- TRANSFER LEARNING!!! --- #
             # ---------------------------- #
@@ -711,7 +606,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
               model.load_state_dict(best_ckpt)
             # else:
             #     print("no pretrained model found")
-            #     exit()
+            #     sys.exit()
 
             print("model saved in:", pretrained_model_path)
             # print("model loaded!")
@@ -737,7 +632,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
             # model.load_state_dict(torch.load(pretrained_model_path))
         else:
             print("no pretrained model found")
-            exit()
+            sys.exit()
 
         # # model.to(device)
         # print("Model loaded!")
@@ -793,7 +688,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
                 model.load_state_dict(pretrained_model_path)
             else:
                 print("no pretrained model found")
-                exit()
+                sys.exit()
 
         elif trn_strategy == 'ft':
         # else:
@@ -814,7 +709,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
             model.load_state_dict(best_ckpt['model'])
         else:
             print("no pretrained model found")
-            exit()
+            sys.exit()
 
 
         # model.to(device)
@@ -859,7 +754,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
 
             else:
                 print("no pretrained model found")
-                exit()
+                sys.exit()
 
         elif trn_strategy == 'ft':
             # ---------------------- #
@@ -878,7 +773,7 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
                 model.load_state_dict(best_ckpt['model'])
         else:
             print("no pretrained model found")
-            exit()
+            sys.exit()
 
         # model.to(device)
         # print("model loaded!")
@@ -889,6 +784,6 @@ def load_model_from_path(model_name, trn_strategy, dataset, model_weights_path):
 
     else:
         print("Model not supported")
-        exit()
+        sys.exit()
 
     return model, pretrained_model_path
