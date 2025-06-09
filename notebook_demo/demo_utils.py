@@ -3,7 +3,6 @@
 import os
 import shutil
 import sys
-# import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,50 +10,14 @@ import torchvision.transforms as transforms
 # import torch.models as models
 from torchvision import models
 import timm  # for xception model
-# from torchvision import models
 from genericpath import exists
-# import mediapipe as mp
 import cv2
-# import numpy as np
 import glob
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-# from scipy.special import expit 
-
 
 # ---------------------------------------------------------------- #
-# Focal loss definition
-# taken from: https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
-# default values: alpha = 0.25, gamma = 2 ->  https://pytorch.org/vision/main/_modules/torchvision/ops/focal_loss.html
-# ------------------------------------------------------- #
-class FocalLoss(nn.Module):
-    def __init__(self, alpha: float = -1, gamma: float = 2, reduction: str = "mean"):
-        super(FocalLoss, self).__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.reduction = reduction
-
-    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-        inputs = inputs.float()
-        targets = targets.float()
-        p = torch.sigmoid(inputs)
-        ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-        p_t = p * targets + (1 - p) * (1 - targets)
-        loss = ce_loss * ((1 - p_t) ** self.gamma)
-
-        if self.alpha >= 0:
-            alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-            loss = alpha_t * loss
-
-        if self.reduction == "mean":
-            loss = loss.mean()
-        elif self.reduction == "sum":
-            loss = loss.sum()
-
-        return loss
-# ---------------------------------------------------------------- #
-
 # hardcoded frames extraction for the occ and no_occ frames
 # Hand_occ_1
 
@@ -370,13 +333,6 @@ no_occ_frames = [
     ]
 
 
-# # check if real and fake frames have the same frames names
-# def check_frames(frames):
-#     real_frames = frames['original_obj_occ']
-#     fake_frames = frames['ghost_obj_occ']
-
-#     return set(real_frames) == set(fake_frames)
-
 def organize_frames(dataset_path, save_path):
     for root, dirs, files in os.walk(dataset_path):
         for file in files:
@@ -408,14 +364,14 @@ def organize_frames(dataset_path, save_path):
                         # print(f"File {file} is in the hardcoded frames for hand occlusion.")
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(occ_save_frame_path, file)
-                        print(f"Moving {src_file} to {dst_file}")
+                        # print(f"Moving {src_file} to {dst_file}")
                         # os.rename(src_file, dst_file)
                         shutil.move(src_file, dst_file)
                     elif file in no_occ_frames:
                         # print(f"File {file} is in the hardcoded frames for no hand occlusion.")
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(no_occ_save_frame_path, file)
-                        print(f"Moving {src_file} to {dst_file}")
+                        # print(f"Moving {src_file} to {dst_file}")
                         # os.rename(src_file, dst_file)
                         shutil.move(src_file, dst_file)
                     else:
@@ -443,10 +399,14 @@ def organize_frames(dataset_path, save_path):
 
 def check_num_frames(path):
     # Iterate over all directories and report only those with exactly 100 frames
+    # frames_ok = False
     for root, dirs, files in os.walk(path):
         image_files = [f for f in files if f.lower().endswith(('.jpg', '.png'))]
         if len(image_files) == 100:
             print(f"Directory {root} contains exactly 100 frames.")
+            # frames_ok = True
+    
+    # if not frames_ok: print("missing frames in some")
 
 # ------------------------------------------------------------------------------------------- #
 def get_test_transf():
@@ -475,11 +435,11 @@ def model_forward_pass(imgs_tensor, model, device):
     return all_probs 
 
 # ----------------------------------------------------------------------------------------------- #
-def plot_prob_graph(original_prob, fake_prob, model_str):
+def plot_prob_graph(original_prob, fake_prob, model_str, frames_type):
     plt.plot(original_prob, label='Original Predictions', alpha=0.8)
     plt.plot(fake_prob, label='Fake Predictions', alpha=0.8)
     plt.axhline(0.5, color='k', linestyle='--', label='Threshold = 0.5')  # Add threshold line at 0.5
-    plt.title(f'{model_str} Original Predictions VS Fake Predictions')
+    plt.title(f'{model_str} Original {frames_type} Predictions VS Fake {frames_type} Predictions')
     plt.xlabel('Frames')
     plt.ylabel('Model score')
     plt.legend()
@@ -499,6 +459,9 @@ def get_model_path(model_weights_path, model_str):
 
 # ------------------------------------------------------------------------------------------- #
 def load_model_from_path(model_name, pretrained_model_path):
+
+    # pretrained_model_path = get_model_path()
+
     if model_name == 'mnetv2':
         print("Loading MobileNetV2 model")
         model = models.mobilenet_v2(weights = 'MobileNet_V2_Weights.IMAGENET1K_V2')
