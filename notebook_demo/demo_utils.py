@@ -16,12 +16,13 @@ import glob
 import re
 import numpy as np
 import matplotlib.pyplot as plt
+from utilscripts.focalLoss import FocalLoss
 
-# ---------------------------------------------------------------- #
-# Focal loss definition
-# taken from: https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
-# default values: alpha = 0.25, gamma = 2 ->  https://pytorch.org/vision/main/_modules/torchvision/ops/focal_loss.html
-# ------------------------------------------------------- #
+# # ---------------------------------------------------------------- #
+# # Focal loss definition
+# # taken from: https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
+# # default values: alpha = 0.25, gamma = 2 ->  https://pytorch.org/vision/main/_modules/torchvision/ops/focal_loss.html
+# # ------------------------------------------------------- #
 # # converted as a class to define it as criterion 
 # class FocalLoss(nn.Module):
 #     def __init__(self, alpha: float = -1, gamma: float = 2, reduction: str = "mean"): # changed default reduction to mean instead of none
@@ -374,70 +375,46 @@ def organize_frames(dataset_path, save_path):
     for root, dirs, files in os.walk(dataset_path):
         for file in files:
             if file.endswith('.jpg') or file.endswith('.png'):
-                # fix the / in the root path
-                root = root.replace('\\', '/')
-                save_frame_path = os.path.join(save_path, root.split('/')[-1], root.split('/')[-2])
-                # print("Frames path:", save_frame_path) # preprocessed_faces/fake/hand_occlusion
-                if not os.path.exists(save_frame_path):
-                    os.makedirs(save_frame_path, exist_ok=True)
-                # root = path to frames dir
+                root_norm = root.replace('\\', '/')
+                # Print for debugging
+                # print(f"Processing: root={root_norm}, file={file}")
+
+                # Determine occlusion type and real/fake
+                if 'hand_occlusion' in root_norm:
+                    occ_type = 'hand_occlusion'
+                elif 'obj_occlusion' in root_norm:
+                    occ_type = 'obj_occlusion'
+                else:
+                    continue
+
+                # Determine real/fake
+                if '/real' in root_norm:
+                    real_fake = 'real'
+                elif '/fake' in root_norm:
+                    real_fake = 'fake'
+                else:
+                    continue
+
+                save_frame_path = os.path.join(save_path, occ_type, real_fake) # ./notebook_demo/preprocessed_faces/obj_occlusion/real/
+                os.makedirs(save_frame_path, exist_ok=True)
+
+                # Create subdirectories for occ and no_occ
                 occ_save_frame_path = os.path.join(save_frame_path, 'occ')
                 no_occ_save_frame_path = os.path.join(save_frame_path, 'no_occ')
-                # print("Occ frames path:", occ_save_frame_path)
-                # print("No occ frames path:", no_occ_save_frame_path)
-                # breakpoint()
-                if not os.path.exists(occ_save_frame_path):
-                    os.makedirs(occ_save_frame_path, exist_ok=True)
-                if not os.path.exists(no_occ_save_frame_path):
-                    os.makedirs(no_occ_save_frame_path, exist_ok=True) # exist_ok=True will not raise an error if the directory already exists
-                # breakpoint()
-                # print("root:", root)
-                # ----------------------------------------------------------------------------------------------- #
+                os.makedirs(occ_save_frame_path, exist_ok=True)
+                os.makedirs(no_occ_save_frame_path, exist_ok=True)
 
-                # Move the frames to the respective directories following the structure in the hardcoded frames
-
-                if 'hand_occlusion' in root:
-                    if file in occ_frames['hand_occlusion']:
-                        # print(f"File {file} is in the hardcoded frames for hand occlusion.")
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(occ_save_frame_path, file)
-                        # print(f"Moving {src_file} to {dst_file}")
-                        # os.rename(src_file, dst_file)
-                        # shutil.move(src_file, dst_file)
-                        shutil.copy(src_file, dst_file)
-                        
-                    elif file in no_occ_frames:
-                        # print(f"File {file} is in the hardcoded frames for no hand occlusion.")
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(no_occ_save_frame_path, file)
-                        # print(f"Moving {src_file} to {dst_file}")
-                        # os.rename(src_file, dst_file)
-                        # shutil.move(src_file, dst_file)
-                        shutil.copy(src_file, dst_file)
-                    else:
-                        # print(f"File {file} does not match any hardcoded frames for hand occlusion, skipping.")
-                        continue
-                elif 'obj_occlusion' in root:
-                    if file in occ_frames['obj_occlusion']:
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(occ_save_frame_path, file)
-                        # print(f"Moving {src_file} to {dst_file}")
-                        # shutil.move(src_file, dst_file)
-                        shutil.copy(src_file, dst_file)
-
-                    elif file in no_occ_frames:
-                        # print(f"File {file} is in the hardcoded frames for no object occlusion.")
-                        src_file = os.path.join(root, file)
-                        dst_file = os.path.join(no_occ_save_frame_path, file)
-                        # print(f"Moving {src_file} to {dst_file}")
-                        # shutil.move(src_file, dst_file) # move frame from src to dst
-                        shutil.copy(src_file, dst_file) # copy frame from src to dst
-                    else:
-                        # print(f"File {file} does not match any hardcoded frames for object occlusion, skipping.")
-                        continue
+                # Copy files to correct folder
+                if file in occ_frames[occ_type]:
+                    dst_file = os.path.join(occ_save_frame_path, file)
+                elif file in no_occ_frames:
+                    dst_file = os.path.join(no_occ_save_frame_path, file)
                 else:
-                    # print(f"Directory {root} does not match any hardcoded frames, skipping.")
                     continue
+
+                src_file = os.path.join(root, file)
+                shutil.copy(src_file, dst_file)
+
 # ----------------------------------------------------------------------------------------------- #
 
 def check_num_frames(path):
@@ -500,6 +477,7 @@ def get_model_path(model_weights_path, model_str):
 def load_model_from_path(model_name, pretrained_model_path):
 
     # pretrained_model_path = get_model_path()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     if model_name == 'mnetv2':
         print("Loading MobileNetV2 model")
@@ -511,7 +489,7 @@ def load_model_from_path(model_name, pretrained_model_path):
             model.load_state_dict(best_ckpt['model'])
         else:
             model.load_state_dict(best_ckpt)
-
+        model.to(device)
     elif model_name == 'effnetb4':
         print("Loading EfficientNetB4 model")
         model = models.efficientnet_b4(weights='EfficientNet_B4_Weights.IMAGENET1K_V1')
@@ -521,6 +499,8 @@ def load_model_from_path(model_name, pretrained_model_path):
             model.load_state_dict(best_ckpt['model'])
         else:
             model.load_state_dict(best_ckpt)
+        
+        model.to(device)
 
     elif model_name == 'xception':
         print("Loading pretrained XceptionNet model...")
@@ -533,8 +513,9 @@ def load_model_from_path(model_name, pretrained_model_path):
             model.load_state_dict(best_ckpt['model'])
         else:
             model.load_state_dict(torch.load(pretrained_model_path))
+        model.to(device)
     else:
         print("Model not supported")
         sys.exit()
 
-    return model, pretrained_model_path
+    return model
