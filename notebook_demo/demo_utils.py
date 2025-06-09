@@ -439,7 +439,7 @@ def plot_prob_graph(original_prob, fake_prob, model_str, frames_type):
     plt.plot(original_prob, label='Original Predictions', alpha=0.8)
     plt.plot(fake_prob, label='Fake Predictions', alpha=0.8)
     plt.axhline(0.5, color='k', linestyle='--', label='Threshold = 0.5')  # Add threshold line at 0.5
-    plt.title(f'{model_str} Original {frames_type} Predictions VS Fake {frames_type} Predictions')
+    plt.title(f'{model_str} - Original {frames_type} Predictions VS Fake {frames_type} Predictions')
     plt.xlabel('Frames')
     plt.ylabel('Model score')
     plt.legend()
