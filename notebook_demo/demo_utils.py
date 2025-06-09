@@ -17,40 +17,6 @@ import re
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-# # ------------------------------------------------------- #
-# # converted as a class to define it as criterion 
-# class FocalLoss(nn.Module):
-#     def __init__(self, alpha: float = -1, gamma: float = 2, reduction: str = "mean"): # changed default reduction to mean instead of none
-#         super(FocalLoss, self).__init__()
-#         self.alpha = alpha
-#         self.gamma = gamma
-#         self.reduction = reduction
-
-#     def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-#         inputs = inputs.float()
-#         targets = targets.float()
-#         p = torch.sigmoid(inputs)
-#         ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-#         p_t = p * targets + (1 - p) * (1 - targets)
-#         loss = ce_loss * ((1 - p_t) ** self.gamma)
-
-#         if self.alpha >= 0:
-#             alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-#             loss = alpha_t * loss
-
-#         # if self.reduction == "none":
-#             # pass
-#             # loss = loss.mean() # Reduce the loss to a scalar before passing it to backward
-#             # to reduce loss to a scalar in case of batch of images -> loss.mean() or loss.sum()
-#             # -> change deafualt reduction to mean
-#         if self.reduction == "mean":
-#             loss = loss.mean()
-#         elif self.reduction == "sum":
-#             loss = loss.sum()
-
-#         return loss
-
 # ---------------------------------------------------------------- #
 # hardcoded frames extraction for the occ and no_occ frames
 # Hand_occ_1
@@ -400,14 +366,17 @@ def organize_frames(dataset_path, save_path):
                         dst_file = os.path.join(occ_save_frame_path, file)
                         # print(f"Moving {src_file} to {dst_file}")
                         # os.rename(src_file, dst_file)
-                        shutil.move(src_file, dst_file)
+                        # shutil.move(src_file, dst_file)
+                        shutil.copy(src_file, dst_file)
+                        
                     elif file in no_occ_frames:
                         # print(f"File {file} is in the hardcoded frames for no hand occlusion.")
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(no_occ_save_frame_path, file)
                         # print(f"Moving {src_file} to {dst_file}")
                         # os.rename(src_file, dst_file)
-                        shutil.move(src_file, dst_file)
+                        # shutil.move(src_file, dst_file)
+                        shutil.copy(src_file, dst_file)
                     else:
                         # print(f"File {file} does not match any hardcoded frames for hand occlusion, skipping.")
                         continue
@@ -416,13 +385,16 @@ def organize_frames(dataset_path, save_path):
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(occ_save_frame_path, file)
                         # print(f"Moving {src_file} to {dst_file}")
-                        shutil.move(src_file, dst_file)
+                        # shutil.move(src_file, dst_file)
+                        shutil.copy(src_file, dst_file)
+
                     elif file in no_occ_frames:
                         # print(f"File {file} is in the hardcoded frames for no object occlusion.")
                         src_file = os.path.join(root, file)
                         dst_file = os.path.join(no_occ_save_frame_path, file)
                         # print(f"Moving {src_file} to {dst_file}")
-                        shutil.move(src_file, dst_file)
+                        # shutil.move(src_file, dst_file) # move frame from src to dst
+                        shutil.copy(src_file, dst_file) # copy frame from src to dst
                     else:
                         # print(f"File {file} does not match any hardcoded frames for object occlusion, skipping.")
                         continue
@@ -433,14 +405,10 @@ def organize_frames(dataset_path, save_path):
 
 def check_num_frames(path):
     # Iterate over all directories and report only those with exactly 100 frames
-    # frames_ok = False
     for root, dirs, files in os.walk(path):
         image_files = [f for f in files if f.lower().endswith(('.jpg', '.png'))]
         if len(image_files) == 100:
             print(f"Directory {root} contains exactly 100 frames.")
-            # frames_ok = True
-    
-    # if not frames_ok: print("missing frames in some")
 
 # ------------------------------------------------------------------------------------------- #
 def get_test_transf():
@@ -532,4 +500,4 @@ def load_model_from_path(model_name, pretrained_model_path):
         print("Model not supported")
         sys.exit()
 
-    return model
+    return model, pretrained_model_path
