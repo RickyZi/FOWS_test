@@ -16,44 +16,6 @@ import glob
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-# from utilscripts.focalLoss import FocalLoss
-
-# # ---------------------------------------------------------------- #
-# # Focal loss definition
-# # taken from: https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/focal_loss.py
-# # default values: alpha = 0.25, gamma = 2 ->  https://pytorch.org/vision/main/_modules/torchvision/ops/focal_loss.html
-# # ------------------------------------------------------- #
-# # converted as a class to define it as criterion 
-# class FocalLoss(nn.Module):
-#     def __init__(self, alpha: float = -1, gamma: float = 2, reduction: str = "mean"): # changed default reduction to mean instead of none
-#         super(FocalLoss, self).__init__()
-#         self.alpha = alpha
-#         self.gamma = gamma
-#         self.reduction = reduction
-
-#     def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-#         inputs = inputs.float()
-#         targets = targets.float()
-#         p = torch.sigmoid(inputs)
-#         ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
-#         p_t = p * targets + (1 - p) * (1 - targets)
-#         loss = ce_loss * ((1 - p_t) ** self.gamma)
-
-#         if self.alpha >= 0:
-#             alpha_t = self.alpha * targets + (1 - self.alpha) * (1 - targets)
-#             loss = alpha_t * loss
-
-#         # if self.reduction == "none":
-#             # pass
-#             # loss = loss.mean() # Reduce the loss to a scalar before passing it to backward
-#             # to reduce loss to a scalar in case of batch of images -> loss.mean() or loss.sum()
-#             # -> change deafualt reduction to mean
-#         if self.reduction == "mean":
-#             loss = loss.mean()
-#         elif self.reduction == "sum":
-#             loss = loss.sum()
-
-#         return loss
 
 # ---------------------------------------------------------------- #
 # hardcoded frames extraction for the occ and no_occ frames
@@ -377,15 +339,7 @@ def organize_frames(dataset_path, save_path):
             if file.endswith('.jpg') or file.endswith('.png'):
                 root_norm = root.replace('\\', '/')
                 # Print for debugging
-                # print(f"Processing: root={root_norm}, file={file}")
-
-                # Determine occlusion type and real/fake
-                if 'hand_occlusion' in root_norm:
-                    occ_type = 'hand_occlusion'
-                elif 'obj_occlusion' in root_norm:
-                    occ_type = 'obj_occlusion'
-                else:
-                    continue
+                print(f"Processing: root={root_norm}, file={file}")
 
                 # Determine real/fake
                 if '/real' in root_norm:
@@ -395,7 +349,16 @@ def organize_frames(dataset_path, save_path):
                 else:
                     continue
 
-                save_frame_path = os.path.join(save_path, occ_type, real_fake) # ./notebook_demo/preprocessed_faces/obj_occlusion/real/
+                # Determine occlusion type and real/fake
+                if '/hand_occlusion' in root_norm:
+                    occ_type = 'hand_occlusion'
+                elif '/obj_occlusion' in root_norm:
+                    occ_type = 'obj_occlusion'
+                else:
+                    continue
+
+                
+                save_frame_path = os.path.join(save_path, real_fake, occ_type) # ./notebook_demo/preprocessed_faces/real/obj_occlusion/
                 os.makedirs(save_frame_path, exist_ok=True)
 
                 # Create subdirectories for occ and no_occ
@@ -407,9 +370,12 @@ def organize_frames(dataset_path, save_path):
                 # Copy files to correct folder
                 if file in occ_frames[occ_type]:
                     dst_file = os.path.join(occ_save_frame_path, file)
+                    print(f"saving {dst_file} in folder {occ_save_frame_path}")
                 elif file in no_occ_frames:
                     dst_file = os.path.join(no_occ_save_frame_path, file)
+                    print(f"saving {dst_file} in folder {no_occ_save_frame_path}")
                 else:
+                    print(f"{file} not moved")
                     continue
 
                 src_file = os.path.join(root, file)
@@ -452,10 +418,10 @@ def model_forward_pass(imgs_tensor, model, device):
 
 # ----------------------------------------------------------------------------------------------- #
 def plot_prob_graph(original_prob, fake_prob, model_str, frames_type):
-    plt.plot(original_prob, label='Original Predictions', alpha=0.8)
-    plt.plot(fake_prob, label='Fake Predictions', alpha=0.8)
+    plt.plot(original_prob, label='Original Predictions', alpha=0.8, color = 'b')
+    plt.plot(fake_prob, label='Fake Predictions', alpha=0.8, color = 'r')
     plt.axhline(0.5, color='k', linestyle='--', label='Threshold = 0.5')  # Add threshold line at 0.5
-    plt.title(f'{model_str} - Original {frames_type} Predictions VS Fake {frames_type} Predictions')
+    plt.title(f'Original vs Fake predictions - {model_str} model - {frames_type} data')
     plt.xlabel('Frames')
     plt.ylabel('Model score')
     plt.tight_layout()
