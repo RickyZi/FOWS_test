@@ -22,7 +22,8 @@ import re
 import numpy as np
 
 # ----------------------------------------------------------------------------------------------- #
-
+# TODO: update code to load models (use args)
+# ----------------------------------------------------------------------------------------------- #
 
 def get_pretrained_path(model_name, trn_strategy, dataset, models_path):
     # Check if the model is valid
