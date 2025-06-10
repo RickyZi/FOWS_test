@@ -417,11 +417,11 @@ def model_forward_pass(imgs_tensor, model, device):
     return all_probs 
 
 # ----------------------------------------------------------------------------------------------- #
-def plot_prob_graph(original_prob, fake_prob, model_str, frames_type):
+def plot_prob_graph(original_prob, fake_prob, model_str, frames_type, vid):
     plt.plot(original_prob, label='Original Predictions', alpha=0.8, color = 'b')
     plt.plot(fake_prob, label='Fake Predictions', alpha=0.8, color = 'r')
     plt.axhline(0.5, color='k', linestyle='--', label='Threshold = 0.5')  # Add threshold line at 0.5
-    plt.title(f'Original vs Fake predictions - {model_str} model - {frames_type} data')
+    plt.title(f'Original vs Fake predictions - {model_str} model - {vid} - {frames_type} data')
     plt.xlabel('Frames')
     plt.ylabel('Model score')
     plt.tight_layout()
