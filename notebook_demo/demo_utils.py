@@ -348,17 +348,17 @@ def organize_frames(dataset_path, save_path):
                     real_fake = 'fake'
                 else:
                     continue
-
+                
                 # Determine occlusion type and real/fake
-                if '/hand_occlusion' in root_norm:
+                if 'hand_occlusion' in root_norm:
                     occ_type = 'hand_occlusion'
-                elif '/obj_occlusion' in root_norm:
+                elif 'obj_occlusion' in root_norm:
                     occ_type = 'obj_occlusion'
                 else:
                     continue
 
-                
-                save_frame_path = os.path.join(save_path, real_fake, occ_type) # ./notebook_demo/preprocessed_faces/real/obj_occlusion/
+
+                save_frame_path = os.path.join(save_path, real_fake, occ_type) # ./notebook_demo/preprocessed_faces/obj_occlusion/real/
                 os.makedirs(save_frame_path, exist_ok=True)
 
                 # Create subdirectories for occ and no_occ
