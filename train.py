@@ -110,11 +110,9 @@ def main():
 
     init_seed() # init random seed for reproducibility
 
-    # if args.scratch and args.model == 'mobilenetv2':
     # Move the model to GPU if available
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    # milan_model = False
     print("thresh: ", args.thresh)
 
     # ---------------------- #
@@ -128,13 +126,13 @@ def main():
     breakpoint()
 
     if args.train_dataset == 'fows_occ':
-        train_dir = '../dataset/fows_occ/training/'
+        train_dir = './dataset/fows_occ/training/'
         # test_dir = '/media/data/rz_dataset/users_face_occlusion/testing/'
         # args.data_aug = ''
         
 
     elif args.train_dataset == 'fow_no_occ':
-        train_dir = '../dataset/fows_no_occlusion/training/'
+        train_dir = './dataset/fows_no_occlusion/training/'
         # test_dir = '/media/data/rz_dataset/user_faces_no_occlusion/testing/'
 
     else:
@@ -156,9 +154,9 @@ def main():
     best_val_loss = float('inf')  # Initialize best validation loss
     early_stopping_counter = 0  # Counter to keep track of non-improving epochs
 
-    # --------------------------------- #
-    # Define the optimizer #
-    # --------------------------------- #
+    # ---------------------------------- #
+    # ------ Define the optimizer ------ #
+    # ---------------------------------- #
 
     if args.optimizer == 'adam':
         optimizer = optim.Adam(model.parameters(), lr= args.lr) #, weight_decay= args.weight_decay) # add weight decay
@@ -175,9 +173,9 @@ def main():
         
     print("optimizer: ", args.optimizer)
     # breakpoint()
-    # --------------------------------- #
-    # Define the loss function 
-    # -------------------------------------------------------- #
+    # ---------------------------------- #
+    # ---- Define the loss function ---- # 
+    # ---------------------------------- #
     # Focal loss
     if args.loss == 'focal':
         criterion = FocalLoss(alpha=0.25, gamma=2) 
@@ -225,55 +223,50 @@ def main():
 
     batch_size = args.batch_size # 32
 
-    train_transform = transforms.Compose([
-        # base transforms
-        transforms.RandomResizedCrop((224,224)), #interpolation = BICUBIC), # extracts random crop from image (i.e. 300x300) and rescale it to 224x224
-        transforms.RandomHorizontalFlip(), # helps the training
-        # augmentations
-        transforms.RandomRotation((-5,5)), # rotate the image by a random angle between -5 and 5 degrees
-        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), 
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    if args.data_aug == 'fows':
+        train_transform = transforms.Compose([
+            # base transforms
+            transforms.RandomResizedCrop((224,224)), #interpolation = BICUBIC), # extracts random crop from image (i.e. 300x300) and rescale it to 224x224
+            transforms.RandomHorizontalFlip(), # helps the training
+            # augmentations
+            transforms.RandomRotation((-5,5)), # rotate the image by a random angle between -5 and 5 degrees
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1), 
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
-    # training and validation dataset
-    train_dataset = FaceImagesDataset(train_dir, train_transform)
-    train_size = int(0.8 * len(train_dataset)) # 80% of the dataset for training  -> 9600 thesis imgs in training
-    val_size = len(train_dataset) - train_size # 20% of the dataset for validation -> 2400 thesis imgs in testing/validation
+        # training and validation dataset
+        train_dataset = FaceImagesDataset(train_dir, train_transform)
+        train_size = int(0.8 * len(train_dataset)) # 80% of the dataset for training  -> 9600 thesis imgs in training
+        val_size = len(train_dataset) - train_size # 20% of the dataset for validation -> 2400 thesis imgs in testing/validation
 
-    # split the dataset into training and validation
-    train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size], generator)
-    # returns two datasets: train_dataset and val_dataset
+        # split the dataset into training and validation
+        train_dataset, val_dataset = random_split(train_dataset, [train_size, val_size], generator)
+        # returns two datasets: train_dataset and val_dataset
 
-    # test with samplers for the dataloader
-    sampler_train = RandomSampler(train_dataset)
-    sampler_val   = SequentialSampler(val_dataset)
+        # test with samplers for the dataloader
+        sampler_train = RandomSampler(train_dataset)
+        sampler_val   = SequentialSampler(val_dataset)
 
-    # batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
+        # Define the dataloaders
+        train_dataloader = DataLoader(train_dataset,batch_size=batch_size, sampler=sampler_train, drop_last = True, num_workers = 3) # batch_sampler = batch_sampler_train) #
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, sampler=sampler_val, drop_last = False, num_workers = 3)
 
-    train_dataloader = DataLoader(train_dataset,batch_size=batch_size, sampler=sampler_train, drop_last = True, num_workers = 3) # batch_sampler = batch_sampler_train) #
-    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, sampler=sampler_val, drop_last = False, num_workers = 3)
+    else:
+        print("data augmentation not supported")
+        exit()
 
-    # print("data augmentations: ", args.data_aug)
+    print("data augmentations: ", args.data_aug)
     # print(train_transform)
-    # breakpoint()
-    # -------------------------------------------------------- #
-    # Define the dataset and dataloaders
-    # NOTE: to be updated to load GOTCHA dataset as well
-
+    
     # -------------------------------------------------------- #
     # Train the model
     # -------------------------------------------------------- #
-    # training = args.training # True or False
-    # print("training", training)
-    # ()
-    # save_model_path = args.save_model_path
+    
 
     print(f"Training the model {model_name}...")
 
-    # if args.wandb:
-    #     run.tags = run.tags + ('Training',) # add testing tag
-
+    
     # # creating a folder where to save the testing results 
     if args.tl:
         exp_results_path = f'./results/results_TL/{args.tags}/training' # i.e. ./results/EfficientNetB4_FF_no_occ_focal_loss/testing
@@ -310,7 +303,7 @@ def main():
         log.info(f"Training the model...")
         
 
-    # gradcam_save_path = ""
+    
 
     start_epoch = 0
     # if args.resume:

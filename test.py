@@ -5,39 +5,22 @@ import torch.optim as optim
 import torchvision.transforms as transforms
 import torchvision.models as models
 from torch.utils.data import DataLoader, SequentialSampler
-# from torchvision.models import mobilenet_v2
 import os
 from utilscripts.customDataset import FaceImagesDataset
-# from utils.albuDataLoader import FaceImagesAlbu
 from utilscripts.train_val_test import *
-# from gotcha_trn_val_tst import gotcha_test
-# import cv2
-# import wandb # for logging results to wandb
 import argparse # for command line arguments
-# pip install efficientnet_pytorch # need to install this package to use EfficientNet
-# from efficientnet_pytorch import EfficientNetdata
-
 from utilscripts.logger import * # import the logger functions
 import timm # for using the XceptionNet model (pretrained)
 # pip install timm # install the timm package to use the XceptionNet model
 # from utils.papers_data_augmentations import *
-
-# import fornet
-# from fornet import *
-# import yaml
 import random
-# from train import FocalLoss
-# from focalLoss import FocalLoss
-# from test_utils import *
 from utilscripts.get_trn_tst_model import *
 
 # -------------------------------------------------------------------------------- #
 # test the TL models
-# MILAN_FF
 # python test.py --model mnetv2 --train_dataset fows_occ --test_dataset fows_no_occ --tl --tags MnetV2_fows_occ_TL_vs_fows_no_occ
 # --model = model name
-
-
+# --tags = model_info
 # ------------------------------------------------------------------------------------------- #
 # Create the argument parser
 def get_args_parse():
@@ -53,7 +36,7 @@ def get_args_parse():
     parser.add_argument('--save-log', action='store_false', help='Save the model output logs')
     parser.add_argument('--tl', action = 'store_true', help='Use the re-trained version of the model (transf learning)')
     parser.add_argument('--ft', action = 'store_true', help='Fine-Tuning the model')
-    # parser.add_argument('--data-aug', type=str, default='fows', help='Data augmentation to use for training and testing') 
+    parser.add_argument('--data-aug', type=str, default='fows', help='Data augmentation to use for training and testing') 
     parser.add_argument('--model_path', type = str, default = './model_weights/', help = 'Path to the trained models folder')
     parser.add_argument('--tags', type=str, default='face-occlusion', help='Info about the model, training setting, dataset, test setting, etc.')
     
@@ -152,34 +135,36 @@ def main():
     # --------------------------------- #
     # Define the dataset and dataloaders
     # --------------------------------- #
-    
-    # Transformations for testing data
-    test_transform = transforms.Compose([
-        transforms.Resize((256,256)), 
-        # BICUBIC is used for EfficientNetB4 -> check the documentation
-        # BICUBIC vs BILINEAR -> https://discuss.pytorch.org/t/what-is-the-difference-between-bilinear-and-bicubic-interpolation/20920 
-        transforms.CenterCrop((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-    ])
+    if args.data_aug == 'fows':
+        # Transformations for testing data
+        test_transform = transforms.Compose([
+            transforms.Resize((256,256)), 
+            # BICUBIC is used for EfficientNetB4 -> check the documentation
+            # BICUBIC vs BILINEAR -> https://discuss.pytorch.org/t/what-is-the-difference-between-bilinear-and-bicubic-interpolation/20920 
+            transforms.CenterCrop((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
 
-    # test dataloader 
-    # test_dataset = FaceImagesDataset(test_dir, test_transform)
-    test_dataset = FaceImagesDataset(dataset_dir=test_dir, transform=test_transform, training = False) #, challenge=args.trn_challenge, algo=args.trn_algo)
-    print("test_dataset: ", len(test_dataset))
-    # get the test_dataset labels
-    dataset_labes = test_dataset.label_map
-    print(dataset_labes)
-    sampler_test = SequentialSampler(test_dataset) # load the dataset in the order it is in the folder
-    test_dataloader = DataLoader(test_dataset, 
-                                batch_size= args.batch_size, #64, 
-                                sampler=sampler_test,
-                                num_workers = 3) # shuffle=False)
+        # test dataloader 
+        # test_dataset = FaceImagesDataset(test_dir, test_transform)
+        test_dataset = FaceImagesDataset(dataset_dir=test_dir, transform=test_transform, training = False) #, challenge=args.trn_challenge, algo=args.trn_algo)
+        print("test_dataset: ", len(test_dataset))
+        # get the test_dataset labels
+        dataset_labes = test_dataset.label_map
+        print(dataset_labes)
+        sampler_test = SequentialSampler(test_dataset) # load the dataset in the order it is in the folder
+        test_dataloader = DataLoader(test_dataset, 
+                                    batch_size= args.batch_size, #64, 
+                                    sampler=sampler_test,
+                                    num_workers = 3) # shuffle=False)
+    else:
+        print("data augmentation not supported")
+        exit()
 
 
     print("data augmentations: ", args.data_aug)
-    print(test_transform)
-    # 
+    # print(test_transform)
 
     # -------------------------------------------------------- #
     # Testing the model
