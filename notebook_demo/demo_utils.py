@@ -16,7 +16,7 @@ import glob
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-from utilscripts.focalLoss import FocalLoss
+# from utilscripts.focalLoss import FocalLoss
 
 # # ---------------------------------------------------------------- #
 # # Focal loss definition
@@ -458,8 +458,8 @@ def plot_prob_graph(original_prob, fake_prob, model_str, frames_type):
     plt.title(f'{model_str} - Original {frames_type} Predictions VS Fake {frames_type} Predictions')
     plt.xlabel('Frames')
     plt.ylabel('Model score')
-    plt.legend()
     plt.tight_layout()
+    plt.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3)  # Place legend below the plot
     plt.show()  # Show the plot
 
 # ------------------------------------------------------------------------------------------- #
