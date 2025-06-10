@@ -11,7 +11,7 @@ from utilscripts.customDataset import FaceImagesDataset
 from utilscripts.train_val_test import *
 import argparse # for command line arguments
 from utilscripts.logger import *
-from utilscripts.focalLoss import FocalLoss
+from focalLoss import FocalLoss
 import timm # for using the XceptionNet model (pretrained)
 # pip install timm # install the timm package to use the XceptionNet model
 
