@@ -339,7 +339,7 @@ def organize_frames(dataset_path, save_path):
             if file.endswith('.jpg') or file.endswith('.png'):
                 root_norm = root.replace('\\', '/')
                 # Print for debugging
-                print(f"Processing: root={root_norm}, file={file}")
+                # print(f"Processing: root={root_norm}, file={file}")
 
                 # Determine real/fake
                 if '/real' in root_norm:
@@ -370,12 +370,12 @@ def organize_frames(dataset_path, save_path):
                 # Copy files to correct folder
                 if file in occ_frames[occ_type]:
                     dst_file = os.path.join(occ_save_frame_path, file)
-                    print(f"saving {dst_file} in folder {occ_save_frame_path}")
+                    # print(f"saving {dst_file} in folder {occ_save_frame_path}")
                 elif file in no_occ_frames:
                     dst_file = os.path.join(no_occ_save_frame_path, file)
-                    print(f"saving {dst_file} in folder {no_occ_save_frame_path}")
+                    # print(f"saving {dst_file} in folder {no_occ_save_frame_path}")
                 else:
-                    print(f"{file} not moved")
+                    # print(f"{file} not moved")
                     continue
 
                 src_file = os.path.join(root, file)
